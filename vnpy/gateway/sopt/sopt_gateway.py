@@ -71,7 +71,6 @@ from vnpy.trader.utility import (
 )
 from vnpy.trader.event import EVENT_TIMER
 
-
 STATUS_SOPT2VT = {
     THOST_FTDC_OAS_Submitted: Status.SUBMITTING,
     THOST_FTDC_OAS_Accepted: Status.SUBMITTING,
@@ -126,6 +125,7 @@ symbol_exchange_map = {}
 symbol_name_map = {}
 symbol_size_map = {}
 option_name_map = {}
+
 
 class SoptGateway(BaseGateway):
     """
@@ -282,7 +282,7 @@ class SoptGateway(BaseGateway):
         self.td_api.close()
         self.md_api.close()
 
-    #def write_error(self, msg: str, error: dict):
+    # def write_error(self, msg: str, error: dict):
     #    """"""
     #    error_id = error["ErrorID"]
     #    error_msg = error["ErrorMsg"]
@@ -305,7 +305,6 @@ class SoptGateway(BaseGateway):
         self.count = 0
         self.query_functions = [self.query_account, self.query_position]
         self.event_engine.register(EVENT_TIMER, self.process_timer_event)
-
 
     def on_custom_tick(self, tick):
         """推送自定义合约行情"""
@@ -386,9 +385,9 @@ class SoptMdApi(MdApi):
         exchange = symbol_exchange_map.get(symbol, "")
         if not exchange:
             return
-        timestamp = f"{data['TradingDay']} {data['UpdateTime']}.{int(data['UpdateMillisec']/100)}"
+        timestamp = f"{data['TradingDay']} {data['UpdateTime']}.{int(data['UpdateMillisec'] / 100)}"
         dt = datetime.strptime(timestamp, "%Y%m%d %H:%M:%S.%f")
-        #dt = CHINA_TZ.localize(dt)
+        # dt = CHINA_TZ.localize(dt)
 
         tick = TickData(
             symbol=symbol,
@@ -408,6 +407,7 @@ class SoptMdApi(MdApi):
             ask_price_1=data["AskPrice1"],
             bid_volume_1=data["BidVolume1"],
             ask_volume_1=data["AskVolume1"],
+            trading_day=dt.strftime('%Y-%m-%d'),
             gateway_name=self.gateway_name
         )
 
@@ -523,8 +523,8 @@ class SoptTdApi(TdApi):
         self.positions = {}
         self.sysid_orderid_map = {}
 
-        self.long_option_cost = None    # 多头期权动态市值
-        self.short_option_cost = None   # 空头期权动态市值
+        self.long_option_cost = None  # 多头期权动态市值
+        self.short_option_cost = None  # 空头期权动态市值
 
     def onFrontConnected(self):
         """"""
@@ -597,7 +597,8 @@ class SoptTdApi(TdApi):
         )
         self.gateway.on_order(order)
 
-        self.gateway.write_error(f"交易委托失败:{symbol} {order.direction.value} {order.offset.value} {order.price}, {order.volume}", error)
+        self.gateway.write_error(
+            f"交易委托失败:{symbol} {order.direction.value} {order.offset.value} {order.price}, {order.volume}", error)
 
     def onRspOrderAction(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -621,7 +622,7 @@ class SoptTdApi(TdApi):
         if not data:
             return
 
-        #self.gateway.write_log(print_dict(data))
+        # self.gateway.write_log(print_dict(data))
 
         # Get buffered position object
         key = f"{data['InstrumentID'], data['PosiDirection']}"
@@ -682,16 +683,20 @@ class SoptTdApi(TdApi):
                     # 重新累计多头期权动态权益
                     if position.direction == Direction.LONG:
                         if self.long_option_cost is None:
-                            self.long_option_cost = position.cur_price * position.volume * symbol_size_map.get(position.symbol, 0)
+                            self.long_option_cost = position.cur_price * position.volume * symbol_size_map.get(
+                                position.symbol, 0)
                         else:
-                            self.long_option_cost += position.cur_price * position.volume * symbol_size_map.get(position.symbol, 0)
+                            self.long_option_cost += position.cur_price * position.volume * symbol_size_map.get(
+                                position.symbol, 0)
 
                     # 重新累计空头期权动态权益
                     if position.direction == Direction.SHORT:
                         if self.short_option_cost is None:
-                            self.short_option_cost = position.cur_price * position.volume * symbol_size_map.get(position.symbol, 0)
+                            self.short_option_cost = position.cur_price * position.volume * symbol_size_map.get(
+                                position.symbol, 0)
                         else:
-                            self.short_option_cost += position.cur_price * position.volume * symbol_size_map.get(position.symbol, 0)
+                            self.short_option_cost += position.cur_price * position.volume * symbol_size_map.get(
+                                position.symbol, 0)
 
                 self.gateway.on_position(position)
 
@@ -704,7 +709,7 @@ class SoptTdApi(TdApi):
 
         # 资金差额（权利金，正数，是卖call或卖put，收入权利金; 负数，是买call、买put，付出权利金）
         cash_in = data.get('CashIn')
-        #balance -= cash_in
+        # balance -= cash_in
 
         if self.long_option_cost is not None:
             balance += self.long_option_cost
@@ -717,13 +722,14 @@ class SoptTdApi(TdApi):
             gateway_name=self.gateway_name
         )
 
-        #self.gateway.write_log(print_dict(data))
+        # self.gateway.write_log(print_dict(data))
 
         account.available = data["Available"]
         account.commission = round(float(data['Commission']), 7) + round(float(data['SpecProductCommission']), 7)
         account.margin = round(float(data['CurrMargin']), 7)
         account.close_profit = round(float(data['CloseProfit']), 7) + round(float(data['SpecProductCloseProfit']), 7)
-        account.holding_profit = round(float(data['PositionProfit']), 7) + round(float(data['SpecProductPositionProfit']), 7)
+        account.holding_profit = round(float(data['PositionProfit']), 7) + round(
+            float(data['SpecProductPositionProfit']), 7)
 
         account.trading_day = str(data.get('TradingDay', datetime.now().strftime('%Y-%m-%d')))
         if '-' not in account.trading_day and len(account.trading_day) == 8:
@@ -758,14 +764,14 @@ class SoptTdApi(TdApi):
             if contract.product == Product.OPTION:
                 contract.option_portfolio = data["UnderlyingInstrID"] + "_O"
                 contract.option_underlying = (
-                    data["UnderlyingInstrID"]
-                    + "-"
-                    + str(data["DeliveryYear"])
-                    + str(data["DeliveryMonth"]).rjust(2, "0")
+                        data["UnderlyingInstrID"]
+                        + "-"
+                        + str(data["DeliveryYear"])
+                        + str(data["DeliveryMonth"]).rjust(2, "0")
                 )
                 contract.option_type = OPTIONTYPE_SOPT2VT.get(data["OptionsType"], None)
                 contract.option_strike = data["StrikePrice"]
-                #contract.option_index = str(data["StrikePrice"])
+                # contract.option_index = str(data["StrikePrice"])
                 contract.option_expiry = datetime.strptime(data["ExpireDate"], "%Y%m%d")
                 contract.option_index = get_option_index(
                     contract.option_strike, data["InstrumentCode"]
@@ -806,7 +812,7 @@ class SoptTdApi(TdApi):
 
         timestamp = f"{data['InsertDate']} {data['InsertTime']}"
         dt = datetime.strptime(timestamp, "%Y%m%d %H:%M:%S")
-        #dt = CHINA_TZ.localize(dt)
+        # dt = CHINA_TZ.localize(dt)
 
         order = OrderData(
             accountid=self.userid,
@@ -862,14 +868,14 @@ class SoptTdApi(TdApi):
         self.gateway.on_trade(trade)
 
     def connect(
-        self,
-        address: str,
-        userid: str,
-        password: str,
-        brokerid: int,
-        auth_code: str,
-        appid: str,
-        product_info
+            self,
+            address: str,
+            userid: str,
+            password: str,
+            brokerid: int,
+            auth_code: str,
+            appid: str,
+            product_info
     ):
         """
         Start connection to server.

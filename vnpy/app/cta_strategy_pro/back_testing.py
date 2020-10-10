@@ -1945,7 +1945,7 @@ class BackTestingEngine(object):
             self.daily_max_drawdown_rate = drawdown_rate
             self.max_drawdown_rate_time = data['date']
 
-        msg = u'{}:  net={}, capital={} max={} margin={} commission={}， pos: {}' \
+        msg = u'{}:  net={}, capital={} max={} holding_profit={} commission={}， pos: {}' \
             .format(data['date'],
                     data['net'], c, m,
                     today_holding_profit,

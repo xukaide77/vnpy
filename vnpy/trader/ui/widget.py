@@ -9,7 +9,6 @@ from copy import copy
 
 from PyQt5 import QtCore, QtGui, QtWidgets
 
-
 from vnpy.event import Event, EventEngine
 from ..constant import Direction, Exchange, Offset, OrderType
 from ..engine import MainEngine
@@ -628,7 +627,7 @@ class TradingWidget(QtWidgets.QWidget):
             [order_type.value for order_type in OrderType])
 
         double_validator = QtGui.QDoubleValidator()
-        #double_validator.setBottom(0)
+        # double_validator.setBottom(0)
 
         self.price_line = QtWidgets.QLineEdit()
         self.price_line.setValidator(double_validator)
@@ -721,9 +720,9 @@ class TradingWidget(QtWidgets.QWidget):
         self.setLayout(vbox)
 
     def create_label(
-        self,
-        color: str = "",
-        alignment: int = QtCore.Qt.AlignLeft
+            self,
+            color: str = "",
+            alignment: int = QtCore.Qt.AlignLeft
     ) -> QtWidgets.QLabel:
         """
         Create label with certain font color.

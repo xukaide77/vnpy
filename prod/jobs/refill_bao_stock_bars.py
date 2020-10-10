@@ -20,7 +20,7 @@ import baostock as bs
 from vnpy.trader.constant import Exchange
 from vnpy.data.tdx.tdx_common import get_tdx_market_code
 from vnpy.trader.utility import load_json, get_csv_last_dt, extract_vt_symbol
-from vnpy.data.stock.stock_base import get_stock_base
+from vnpy.data.stock.stock_base import update_stock_base, get_stock_base
 # 保存的1分钟指数 bar目录
 bar_data_folder = os.path.abspath(os.path.join(vnpy_root, 'bar_data'))
 
@@ -34,6 +34,9 @@ if __name__ == "__main__":
     if login_msg.error_code != '0':
         print(f'证券宝登录错误代码:{login_msg.error_code}, 错误信息:{login_msg.error_msg}')
 
+    print('更新股票基本信息')
+    update_stock_base()
+
     symbol_dict = get_stock_base()
     if len(sys.argv) >= 2 and sys.argv[1].lower() == 'all':
         stock_list = list(symbol_dict.keys())
@@ -42,7 +45,6 @@ if __name__ == "__main__":
         # 更新本地合约缓存信息
         stock_list = load_json('stock_list.json')
         print('读取本地stock_list.json文件，共{}个'.format(len(stock_list)))
-
 
     day_fields = "date,code,open,high,low,close,preclose,volume,amount,adjustflag,turn,tradestatus,pctChg,isST"
     min_fields = "date,time,code,open,high,low,close,volume,amount,adjustflag"
@@ -74,7 +76,10 @@ if __name__ == "__main__":
                 exchange_name = '深交所'
                 exchange_code = 'sz'
 
-        symbol_info = symbol_dict.get(vt_symbol)
+        symbol_info = symbol_dict.get(vt_symbol,None)
+        if symbol_info is None:
+            print(f'找不到{vt_symbol}得配置信息', file=sys.stderr)
+            continue
         if symbol_info['类型'] == '指数':
             continue
         stock_name = symbol_info.get('name')

@@ -11,6 +11,7 @@ import sys
 import os
 import gc
 import pandas as pd
+import numpy as np
 import traceback
 
 import bz2
@@ -425,6 +426,9 @@ class SpreadTestingEngine(BackTestingEngine):
                         bid_price_1=float(tick_data['bid_price_1']),
                         bid_volume_1=int(tick_data['bid_volume_1'])
                     )
+
+                    if np.isnan(tick.ask_price_1) or np.isnan(tick.bid_price_1):
+                        continue
 
                     self.new_tick(tick)
 

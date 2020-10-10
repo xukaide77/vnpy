@@ -177,7 +177,7 @@ class PositionHolding:
                 self.short_yd -= trade.volume
             # 多，平仓 =》 减少
             elif trade.offset == Offset.CLOSE:
-                if trade.exchange in [Exchange.SHFE, Exchange.INE] and self.short_yd >=trade.volume:
+                if trade.exchange in [Exchange.SHFE, Exchange.INE] and self.short_yd >= trade.volume:
                     self.short_yd -= trade.volume
                 else:
                     self.short_td -= trade.volume
@@ -194,9 +194,9 @@ class PositionHolding:
             elif trade.offset == Offset.CLOSETODAY:
                 self.long_td -= trade.volume
             elif trade.offset == Offset.CLOSEYESTERDAY:
-                 self.long_yd -= trade.volume
+                self.long_yd -= trade.volume
             elif trade.offset == Offset.CLOSE:
-                if trade.exchange in [Exchange.SHFE, Exchange.INE] and self.long_yd >=trade.volume:
+                if trade.exchange in [Exchange.SHFE, Exchange.INE] and self.long_yd >= trade.volume:
                     self.long_yd -= trade.volume
                 else:
                     self.long_td -= trade.volume

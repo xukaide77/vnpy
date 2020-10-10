@@ -40,7 +40,6 @@ class RiskManager(QtWidgets.QDialog):
         self.trade_hold_active_limit_spin = RiskManagerSpinBox()
         self.trade_hold_percent_limit_spin = RiskManagerSpinBox()
 
-
         save_button = QtWidgets.QPushButton("保存")
         save_button.clicked.connect(self.save_setting)
 
@@ -57,7 +56,7 @@ class RiskManager(QtWidgets.QDialog):
         form.addRow("激活废单/撤单(笔)", self.ratio_active_limit_spin)
         form.addRow("废单比上限(%)", self.reject_limit_percent_spin)
         form.addRow("撤单比上限(%)", self.cancel_limit_percent_spin)
-        form.addRow("激活成交/持仓比阈值（笔）" ,self.trade_hold_active_limit_spin)
+        form.addRow("激活成交/持仓比阈值（笔）", self.trade_hold_active_limit_spin)
         form.addRow("成交/持仓比上限(%)", self.trade_hold_percent_limit_spin)
 
         form.addRow(save_button)

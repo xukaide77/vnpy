@@ -180,6 +180,7 @@ TQ2VT_TYPE = {
     "OPTION": Product.OPTION,
 }
 
+
 @lru_cache(maxsize=9999)
 def vt_to_tq_symbol(symbol: str, exchange: Exchange) -> str:
     """
@@ -432,12 +433,12 @@ class CtpGateway(BaseGateway):
                         self.write_log(f'使用RabbitMQ接口订阅{req.symbol}')
                         self.rabbit_api.subscribe(req)
                     elif self.tq_api:
-                        self.write_log(f'使用天勤接口订阅{ req.symbol}')
+                        self.write_log(f'使用天勤接口订阅{req.symbol}')
                         self.tq_api.subscribe(req)
                 else:
                     # 上期所、上能源支持五档行情，使用天勤接口
                     if self.tq_api and req.exchange in [Exchange.SHFE, Exchange.INE]:
-                        self.write_log(f'使用天勤接口订阅{ req.symbol}')
+                        self.write_log(f'使用天勤接口订阅{req.symbol}')
                         self.tq_api.subscribe(req)
                     else:
                         self.write_log(f'使用CTP接口订阅{req.symbol}')
@@ -543,6 +544,7 @@ class CtpGateway(BaseGateway):
         for combiner in self.tick_combiner_map.get(tick.symbol, []):
             tick = copy(tick)
             combiner.on_tick(tick)
+
 
 class CtpMdApi(MdApi):
     """"""
@@ -652,7 +654,7 @@ class CtpMdApi(MdApi):
 
         # 处理一下标准套利合约的last_price
         if '&' in symbol:
-            tick.last_price = (tick.ask_price_1 + tick.bid_price_1)/2
+            tick.last_price = (tick.ask_price_1 + tick.bid_price_1) / 2
 
         if data["BidVolume2"] or data["AskVolume2"]:
             tick.bid_price_2 = adjust_price(data["BidPrice2"])
@@ -846,7 +848,7 @@ class CtpTdApi(TdApi):
         )
         self.gateway.on_order(order)
 
-        #self.gateway.write_error("交易委托失败", error)
+        # self.gateway.write_error("交易委托失败", error)
 
     def onRspOrderAction(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -965,7 +967,7 @@ class CtpTdApi(TdApi):
         """"""
         if "AccountID" not in data:
             return
-        if len(self.accountid)== 0:
+        if len(self.accountid) == 0:
             self.accountid = data['AccountID']
 
         balance = float(data["Balance"])
@@ -984,8 +986,11 @@ class CtpTdApi(TdApi):
         account.available = round(float(data["Available"]), 7)
         account.commission = round(float(data['Commission']), 7)
         account.margin = round(float(data['CurrMargin']), 7)
-        account.close_profit = round(float(data['CloseProfit']), 7)
-        account.holding_profit = round(float(data['PositionProfit']), 7)
+        account.close_profit = round(float(data['CloseProfit']), 7) + round(
+            float(data.get("SpecProductCloseProfit", 0)), 7)
+        account.holding_profit = round(float(data['PositionProfit']), 7) + round(
+            float(data.get("SpecProductPositionProfit", 0)), 7) + round(
+            float(data.get("SpecProductPositionProfitByAlg", 0)), 7)
         account.trading_day = str(data['TradingDay'])
         if '-' not in account.trading_day and len(account.trading_day) == 8:
             account.trading_day = '-'.join(
@@ -1014,7 +1019,7 @@ class CtpTdApi(TdApi):
                 gateway_name=self.gateway_name
             )
             # 保证金费率(期权合约的保证金比例数值可能不对，所以设置个0.2的最大值)
-            contract.margin_rate = min(0.2,max(data.get('LongMarginRatio', 0), data.get('ShortMarginRatio', 0)))
+            contract.margin_rate = min(0.2, max(data.get('LongMarginRatio', 0), data.get('ShortMarginRatio', 0)))
             if contract.margin_rate == 0:
                 contract.margin_rate = 0.1
 
@@ -1153,7 +1158,7 @@ class CtpTdApi(TdApi):
             exchange=exchange,
             orderid=orderid,
             sys_orderid=data.get("OrderSysID", orderid),
-            tradeid=tradeid.replace(' ',''),
+            tradeid=tradeid.replace(' ', ''),
             direction=DIRECTION_CTP2VT[data["Direction"]],
             offset=OFFSET_CTP2VT[data["OffsetFlag"]],
             price=data["Price"],
@@ -1789,7 +1794,7 @@ class SubMdApi():
         """转换dict， vnpy1 tick dict => vnpy2 tick dict"""
         if 'vtSymbol' not in d:
             return d
-        symbol= d.get('symbol')
+        symbol = d.get('symbol')
         exchange = d.get('exchange')
         vtSymbol = d.pop('vtSymbol', symbol)
         if '.' not in symbol:
@@ -1798,20 +1803,19 @@ class SubMdApi():
             d.update({'vt_symbol': f'{symbol}.{Exchange.LOCAL.value}'})
 
         # 成交数据
-        d.update({'last_price': d.pop('lastPrice',0.0)})  # 最新成交价
-        d.update({'last_volume': d.pop('lastVolume', 0)}) # 最新成交量
+        d.update({'last_price': d.pop('lastPrice', 0.0)})  # 最新成交价
+        d.update({'last_volume': d.pop('lastVolume', 0)})  # 最新成交量
 
-        d.update({'open_interest': d.pop('openInterest', 0)})  #  昨持仓量
+        d.update({'open_interest': d.pop('openInterest', 0)})  # 昨持仓量
 
         d.update({'open_interest': d.pop('tradingDay', get_trading_date())})
 
-
         # 常规行情
-        d.update({'open_price': d.pop('openPrice', 0)})        # 今日开盘价
+        d.update({'open_price': d.pop('openPrice', 0)})  # 今日开盘价
         d.update({'high_price': d.pop('highPrice', 0)})  # 今日最高价
         d.update({'low_price': d.pop('lowPrice', 0)})  # 今日最低价
         d.update({'pre_close': d.pop('preClosePrice', 0)})  # 昨收盘价
-        d.update({'limit_up': d.pop('upperLimit', 0)}) # 涨停价
+        d.update({'limit_up': d.pop('upperLimit', 0)})  # 涨停价
         d.update({'limit_down': d.pop('lowerLimit', 0)})  # 跌停价
 
         # 五档行情
@@ -1951,7 +1955,7 @@ class TqMdApi():
         )
         if symbol.endswith('99') and tick.ask_price_1 == 0.0 and tick.bid_price_1 == 0.0:
             price_tick = quote['price_tick']
-            if isinstance(price_tick, float) or isinstance(price_tick,int):
+            if isinstance(price_tick, float) or isinstance(price_tick, int):
                 tick.ask_price_1 = tick.last_price + price_tick
                 tick.ask_volume_1 = 1
                 tick.bid_price_1 = tick.last_price - price_tick
@@ -1993,8 +1997,8 @@ class TqMdApi():
         ]
         for contract in self.all_instruments:
             if (
-                "SSWE" in contract["instrument_id"]
-                or "CSI" in contract["instrument_id"]
+                    "SSWE" in contract["instrument_id"]
+                    or "CSI" in contract["instrument_id"]
             ):
                 # vnpy没有这两个交易所，需要可以自行修改vnpy代码
                 continue

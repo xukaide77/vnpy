@@ -46,7 +46,6 @@ NUM_MINUTE_MAPPING['1day'] = 60 * 5.5  # 股票，收盘时间是15：00，开�
 # 常量
 QSIZE = 800
 
-
 # 通达信 <=> 交易所代码 映射
 TDX_VN_STOCK_MARKET_MAP = {
     TDXParams.MARKET_SH: Exchange.SSE,  # 1: 上交所
@@ -76,7 +75,7 @@ class TdxStockData(object):
         self.proxy_ip = proxy_ip
         self.proxy_port = proxy_port
 
-        if self.proxy_port == 0 and len(self.proxy_ip)==0:
+        if self.proxy_port == 0 and len(self.proxy_ip) == 0:
             proxy_config = get_cache_json(TDX_PROXY_CONFIG)
             proxy_ip = proxy_config.get('proxy_ip', '')
             proxy_port = proxy_config.get('proxy_port', 0)
@@ -388,16 +387,16 @@ class TdxStockData(object):
                    cache_date: str):
         """加载缓存数据"""
         if not os.path.exists(cache_folder):
-            #self.write_error('缓存目录:{}不存在,不能读取'.format(cache_folder))
+            # self.write_error('缓存目录:{}不存在,不能读取'.format(cache_folder))
             return None
         cache_folder_year_month = os.path.join(cache_folder, cache_date[:6])
         if not os.path.exists(cache_folder_year_month):
-            #self.write_error('缓存目录:{}不存在,不能读取'.format(cache_folder_year_month))
+            # self.write_error('缓存目录:{}不存在,不能读取'.format(cache_folder_year_month))
             return None
 
         cache_file = os.path.join(cache_folder_year_month, '{}_{}.pkb2'.format(cache_symbol, cache_date))
         if not os.path.isfile(cache_file):
-            #self.write_error('缓存文件:{}不存在,不能读取'.format(cache_file))
+            # self.write_error('缓存文件:{}不存在,不能读取'.format(cache_file))
             return None
         with bz2.BZ2File(cache_file, 'rb') as f:
             data = pickle.load(f)
@@ -531,8 +530,10 @@ class TdxStockData(object):
             self.connect()
 
         data = pd.concat(
-            [pd.concat([self.api.to_df(self.api.get_security_list(j, i * 1000)).assign(sse='sz' if j == 0 else 'sh').set_index(
-                ['code', 'sse'], drop=False) for i in range(int(self.api.get_security_count(j) / 1000) + 1)], axis=0) for j
+            [pd.concat(
+                [self.api.to_df(self.api.get_security_list(j, i * 1000)).assign(sse='sz' if j == 0 else 'sh').set_index(
+                    ['code', 'sse'], drop=False) for i in range(int(self.api.get_security_count(j) / 1000) + 1)],
+                axis=0) for j
                 in range(2)], axis=0)
         sz = data.query('sse=="sz"')
         sh = data.query('sse=="sh"')
@@ -549,7 +550,7 @@ class TdxStockData(object):
             hq_codelist.append(
                 {
                     "code": row['code'],
-                    "exchange":  Exchange.SSE.value if row['sse'] == 'sh' else Exchange.SZSE.value,
+                    "exchange": Exchange.SSE.value if row['sse'] == 'sh' else Exchange.SZSE.value,
                     "market_id": 1 if row['sse'] == 'sh' else 0,
                     "name": row['name']
 
@@ -575,12 +576,13 @@ class TdxStockData(object):
 
     def get_stock_quotes_by_type(self, stock_type):
         """根据股票代码类型，获取其最新行情"""
-        stock_list = [(stock.get('market_id'), stock.get('code')) for stock in self.symbol_dict.values() if stock.get('stock_type') == stock_type]
+        stock_list = [(stock.get('market_id'), stock.get('code')) for stock in self.symbol_dict.values() if
+                      stock.get('stock_type') == stock_type]
 
         num_per_count = 60
         results = []
-        for i in range(0, len(stock_list)+1, num_per_count):
-            cur_results = self.get_security_quotes(stock_list[i:i+num_per_count])
+        for i in range(0, len(stock_list) + 1, num_per_count):
+            cur_results = self.get_security_quotes(stock_list[i:i + num_per_count])
             results.extend(cur_results)
 
         return results

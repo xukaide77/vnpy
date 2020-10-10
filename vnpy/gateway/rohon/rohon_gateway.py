@@ -4,7 +4,7 @@ import sys
 import json
 import traceback
 from datetime import datetime, timedelta
-from copy import copy,deepcopy
+from copy import copy, deepcopy
 from functools import lru_cache
 from typing import List
 import pandas as pd
@@ -175,6 +175,7 @@ TQ2VT_TYPE = {
     "OPTION": Product.OPTION,
 }
 
+
 @lru_cache(maxsize=9999)
 def vt_to_tq_symbol(symbol: str, exchange: Exchange) -> str:
     """
@@ -270,7 +271,7 @@ class RohonGateway(BaseGateway):
         product_info = setting["产品信息"]
         rabbit_dict = setting.get('rabbit', None)
         tq_dict = setting.get('tq', None)
-        self.debug = setting.get('debug',False)
+        self.debug = setting.get('debug', False)
 
         if not td_address.startswith("tcp://"):
             td_address = "tcp://" + td_address
@@ -425,12 +426,12 @@ class RohonGateway(BaseGateway):
                         self.write_log(f'使用RabbitMQ接口订阅{req.symbol}')
                         self.rabbit_api.subscribe(req)
                     elif self.tq_api:
-                        self.write_log(f'使用天勤接口订阅{ req.symbol}')
+                        self.write_log(f'使用天勤接口订阅{req.symbol}')
                         self.tq_api.subscribe(req)
                 else:
                     # 上期所、上能源支持五档行情，使用天勤接口
                     if self.tq_api and req.exchange in [Exchange.SHFE, Exchange.INE]:
-                        self.write_log(f'使用天勤接口订阅{ req.symbol}')
+                        self.write_log(f'使用天勤接口订阅{req.symbol}')
                         self.tq_api.subscribe(req)
                     else:
                         self.write_log(f'使用CTP接口订阅{req.symbol}')
@@ -536,6 +537,7 @@ class RohonGateway(BaseGateway):
         for combiner in self.tick_combiner_map.get(tick.symbol, []):
             tick = copy(tick)
             combiner.on_tick(tick)
+
 
 class RohonMdApi(MdApi):
     """"""
@@ -645,7 +647,7 @@ class RohonMdApi(MdApi):
 
         # 处理一下标准套利合约的last_price
         if '&' in symbol:
-            tick.last_price = (tick.ask_price_1 + tick.bid_price_1)/2
+            tick.last_price = (tick.ask_price_1 + tick.bid_price_1) / 2
 
         if data["BidVolume2"] or data["AskVolume2"]:
             tick.bid_price_2 = adjust_price(data["BidPrice2"])
@@ -924,7 +926,7 @@ class RohonTdApi(TdApi):
 
         if "AccountID" not in data:
             return
-        if len(self.accountid)== 0:
+        if len(self.accountid) == 0:
             self.accountid = data['AccountID']
 
         account = AccountData(
@@ -955,7 +957,7 @@ class RohonTdApi(TdApi):
         """
         Callback of instrument query.
         """
-        #if self.gateway.debug:
+        # if self.gateway.debug:
         #    print(f'onRspQryInstrument')
 
         product = PRODUCT_ROHON2VT.get(data["ProductClass"], None)
@@ -1113,7 +1115,7 @@ class RohonTdApi(TdApi):
             exchange=exchange,
             orderid=orderid,
             sys_orderid=data.get("OrderSysID", orderid),
-            tradeid=tradeid.replace(' ',''),
+            tradeid=tradeid.replace(' ', ''),
             direction=DIRECTION_ROHON2VT[data["Direction"]],
             offset=OFFSET_ROHON2VT[data["OffsetFlag"]],
             price=data["Price"],
@@ -1125,14 +1127,14 @@ class RohonTdApi(TdApi):
         self.gateway.on_trade(trade)
 
     def connect(
-        self,
-        address: str,
-        userid: str,
-        password: str,
-        brokerid: int,
-        auth_code: str,
-        appid: str,
-        product_info
+            self,
+            address: str,
+            userid: str,
+            password: str,
+            brokerid: int,
+            auth_code: str,
+            appid: str,
+            product_info
     ):
         """
         Start connection to server.
@@ -1760,29 +1762,28 @@ class SubMdApi():
         """转换dict， vnpy1 tick dict => vnpy2 tick dict"""
         if 'vtSymbol' not in d:
             return d
-        symbol= d.get('symbol')
+        symbol = d.get('symbol')
         exchange = d.get('exchange')
-        vtSymbol = d.pop('vtSymbol', symbol)
+        d.pop('vtSymbol', None)
         if '.' not in symbol:
             d.update({'vt_symbol': f'{symbol}.{exchange}'})
         else:
             d.update({'vt_symbol': f'{symbol}.{Exchange.LOCAL.value}'})
 
         # 成交数据
-        d.update({'last_price': d.pop('lastPrice',0.0)})  # 最新成交价
-        d.update({'last_volume': d.pop('lastVolume', 0)}) # 最新成交量
+        d.update({'last_price': d.pop('lastPrice', 0.0)})  # 最新成交价
+        d.update({'last_volume': d.pop('lastVolume', 0)})  # 最新成交量
 
-        d.update({'open_interest': d.pop('openInterest', 0)})  #  昨持仓量
+        d.update({'open_interest': d.pop('openInterest', 0)})  # 昨持仓量
 
         d.update({'open_interest': d.pop('tradingDay', get_trading_date())})
 
-
         # 常规行情
-        d.update({'open_price': d.pop('openPrice', 0)})        # 今日开盘价
+        d.update({'open_price': d.pop('openPrice', 0)})  # 今日开盘价
         d.update({'high_price': d.pop('highPrice', 0)})  # 今日最高价
         d.update({'low_price': d.pop('lowPrice', 0)})  # 今日最低价
         d.update({'pre_close': d.pop('preClosePrice', 0)})  # 昨收盘价
-        d.update({'limit_up': d.pop('upperLimit', 0)}) # 涨停价
+        d.update({'limit_up': d.pop('upperLimit', 0)})  # 涨停价
         d.update({'limit_down': d.pop('lowerLimit', 0)})  # 跌停价
 
         # 五档行情
@@ -1922,7 +1923,7 @@ class TqMdApi():
         )
         if symbol.endswith('99') and tick.ask_price_1 == 0.0 and tick.bid_price_1 == 0.0:
             price_tick = quote['price_tick']
-            if isinstance(price_tick, float) or isinstance(price_tick,int):
+            if isinstance(price_tick, float) or isinstance(price_tick, int):
                 tick.ask_price_1 = tick.last_price + price_tick
                 tick.ask_volume_1 = 1
                 tick.bid_price_1 = tick.last_price - price_tick
@@ -1960,12 +1961,12 @@ class TqMdApi():
     def query_contracts(self) -> None:
         """"""
         self.all_instruments = [
-            v for k, v in self.api._data["quotes"].items() if v["expired"] == False
+            v for k, v in self.api._data["quotes"].items() if not v["expired"]
         ]
         for contract in self.all_instruments:
             if (
-                "SSWE" in contract["instrument_id"]
-                or "CSI" in contract["instrument_id"]
+                    "SSWE" in contract["instrument_id"]
+                    or "CSI" in contract["instrument_id"]
             ):
                 # vnpy没有这两个交易所，需要可以自行修改vnpy代码
                 continue

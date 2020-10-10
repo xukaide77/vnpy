@@ -573,7 +573,7 @@ class BinancefRestApi(RestClient):
                     self.cache_position_symbols.update({position.symbol: position.volume})
 
             self.gateway.on_position(position)
-            #if position.symbol == 'BTCUSDT':
+            # if position.symbol == 'BTCUSDT':
             #    self.gateway.write_log(f'{position.__dict__}\n {d}')
         # self.gateway.write_log("持仓信息查询成功")
 

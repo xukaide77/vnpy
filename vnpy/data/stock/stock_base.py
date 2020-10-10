@@ -26,6 +26,17 @@ stock_type_map = {
 }
 STOCK_BASE_FILE = 'stock_base.pkb2'
 
+#  get_stock_base 返回数据格式
+#  vt_symbol: {
+#            'exchange': 交易所代码
+#            'code': 股票代码
+#            'name': 中文名
+#            'ipo_date': 上市日期
+#            'out_date': 退市日期
+#            '类型': 股票，指数，其他
+#            'type': stock_cn, index_cn,etf_cn,bond_cn,cb_cn
+#            'status': '上市'  '退市'
+#            }
 
 def get_stock_base():
     """ 获取股票基础信息"""

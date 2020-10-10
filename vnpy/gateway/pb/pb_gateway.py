@@ -17,6 +17,11 @@ from functools import lru_cache
 from collections import OrderedDict
 from multiprocessing.dummy import Pool
 from threading import Thread
+
+from pytdx.hq import TdxHq_API
+from pytdx.config.hosts import hq_hosts
+from pytdx.params import TDXParams
+
 from vnpy.event import EventEngine
 from vnpy.trader.event import EVENT_TIMER
 from vnpy.trader.constant import (
@@ -44,6 +49,9 @@ from vnpy.trader.object import (
 )
 from vnpy.trader.utility import get_folder_path, print_dict, extract_vt_symbol, get_stock_exchange, append_data
 from vnpy.data.tdx.tdx_common import get_stock_type_sz, get_stock_type_sh
+
+# 通达信股票行情
+from vnpy.data.tdx.tdx_common import get_cache_config, get_tdx_market_code
 
 # 代码 <=> 中文名称
 symbol_name_map: Dict[str, str] = {}
@@ -303,11 +311,6 @@ STATUS_PB2VT: Dict[str, Status] = {
 }
 
 STOCK_CONFIG_FILE = 'tdx_stock_config.pkb2'
-from pytdx.hq import TdxHq_API
-# 通达信股票行情
-from vnpy.data.tdx.tdx_common import get_cache_config, get_tdx_market_code
-from pytdx.config.hosts import hq_hosts
-from pytdx.params import TDXParams
 
 
 class PbGateway(BaseGateway):
@@ -474,13 +477,13 @@ class PbMdApi(object):
                         {'ip': "124.160.88.183", 'port': 7709},
                         {'ip': "60.12.136.250", 'port': 7709},
                         {'ip': "218.108.98.244", 'port': 7709},
-                        #{'ip': "218.108.47.69", 'port': 7709},
+                        # {'ip': "218.108.47.69", 'port': 7709},
                         {'ip': "114.80.63.12", 'port': 7709},
                         {'ip': "114.80.63.35", 'port': 7709},
                         {'ip': "180.153.39.51", 'port': 7709},
-                        #{'ip': '14.215.128.18', 'port': 7709},
-                        #{'ip': '59.173.18.140', 'port': 7709}
-                         ]
+                        # {'ip': '14.215.128.18', 'port': 7709},
+                        # {'ip': '59.173.18.140', 'port': 7709}
+                        ]
 
         self.best_ip = {'ip': None, 'port': None}
         self.api_dict = {}  # API 的连接会话对象字典
@@ -722,7 +725,7 @@ class PbMdApi(object):
                 margin_rate=1
             )
 
-            if product!= Product.INDEX:
+            if product != Product.INDEX:
                 # 缓存 合约 =》 中文名
                 symbol_name_map.update({contract.symbol: contract.name})
 
@@ -1654,7 +1657,8 @@ class PbTdApi(object):
                         order.status = Status.REJECTED
                         self.gateway.write_log(f'dbf批量下单，委托被拒:{order.__dict__}')
                         self.gateway.order_manager.on_order(order)
-                        self.gateway.write_error(msg=f'{order.direction.value},{order.vt_symbol},{err_msg}', error={"ErrorID": err_id, "ErrorMsg": "委托失败"})
+                        self.gateway.write_error(msg=f'{order.direction.value},{order.vt_symbol},{err_msg}',
+                                                 error={"ErrorID": err_id, "ErrorMsg": "委托失败"})
 
                     if sys_orderid != '0':
                         self.gateway.order_manager.update_orderid_map(local_orderid=local_orderid,
@@ -1933,7 +1937,6 @@ class PbTdApi(object):
                                                     '{}{}.dbf'.format(PB_FILE_NAMES.get('cancel_order'),
                                                                       self.trading_date)))
 
-
             # 打开dbf文件=》table
             table = dbf.Table(dbf_file)
             # 读取、写入模式
@@ -2062,14 +2065,14 @@ class TqMdApi():
 
         self.ticks = {}
 
-    def connect(self, setting = {}):
+    def connect(self, setting={}):
         """"""
         if self.api and self.is_connected:
             self.gateway.write_log(f'天勤行情已经接入，无需重新连接')
             return
         try:
             from tqsdk import TqApi
-            self.api = TqApi(_stock=True)
+            self.api = TqApi(_stock=True, url="wss://u.shinnytech.com/t/nfmd/front/mobile")
         except Exception as e:
             self.gateway.write_log(f'天勤股票行情API接入异常:'.format(str(e)))
             self.gateway.write_log(traceback.format_exc())
@@ -2203,4 +2206,3 @@ class TqMdApi():
                     self.update_thread.join()
         except Exception as e:
             self.gateway.write_log('退出天勤行情api异常:{}'.format(str(e)))
-

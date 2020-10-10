@@ -11,6 +11,7 @@ import sys
 import os
 import gc
 import pandas as pd
+import numpy as np
 import traceback
 import random
 import bz2
@@ -425,7 +426,10 @@ class PortfolioTestingEngine(BackTestingEngine):
                         last_price=tick_data['price'],
                         volume=tick_data['volume']
                     )
-
+                    if not isinstance(tick.last_price,float):
+                        continue
+                    if np.isnan(tick.last_price):
+                        continue
                     self.new_tick(tick)
 
                 # 结束一个交易日后，更新每日净值

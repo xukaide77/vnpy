@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #  -*- coding: utf-8 -*-
-#__author__ = 'yangyang'
+# __author__ = 'yangyang'
 # 修改：
 # 1， 输入单个合约时，标题不再扩展为 合约.标题
 # 2.  下载tick时，5档行情都下载
@@ -74,11 +74,13 @@ class DataDownloader:
         if isinstance(start_dt, datetime):
             self._start_dt_nano = int(start_dt.timestamp() * 1e9)
         else:
-            self._start_dt_nano = _get_trading_day_start_time(int(datetime(start_dt.year, start_dt.month, start_dt.day).timestamp()) * 1000000000)
+            self._start_dt_nano = _get_trading_day_start_time(
+                int(datetime(start_dt.year, start_dt.month, start_dt.day).timestamp()) * 1000000000)
         if isinstance(end_dt, datetime):
             self._end_dt_nano = int(end_dt.timestamp() * 1e9)
         else:
-            self._end_dt_nano = _get_trading_day_end_time(int(datetime(end_dt.year, end_dt.month, end_dt.day).timestamp()) * 1000000000)
+            self._end_dt_nano = _get_trading_day_end_time(
+                int(datetime(end_dt.year, end_dt.month, end_dt.day).timestamp()) * 1000000000)
         self._current_dt_nano = self._start_dt_nano
         self._symbol_list = symbol_list if isinstance(symbol_list, list) else [symbol_list]
         # 检查合约代码是否存在
@@ -121,7 +123,7 @@ class DataDownloader:
             "focus_datetime": self._start_dt_nano,
             "focus_position": 0,
         }
-        if len(self._symbol_list) ==1:
+        if len(self._symbol_list) == 1:
             single_exchange, single_symbol = self._symbol_list[0].split('.')
         else:
             single_exchange, single_symbol = None, None
@@ -132,7 +134,7 @@ class DataDownloader:
         csv_header = []
         data_cols = ["open", "high", "low", "close", "volume", "open_oi", "close_oi"] if self._dur_nano != 0 else \
             ["last_price", "highest", "lowest", "volume",
-             "amount", "open_interest","upper_limit","lower_limit",
+             "amount", "open_interest", "upper_limit", "lower_limit",
              "bid_price1", "bid_volume1", "ask_price1", "ask_volume1",
              "bid_price2", "bid_volume2", "ask_price2", "ask_volume2",
              "bid_price3", "bid_volume3", "ask_price3", "ask_volume3",

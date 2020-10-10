@@ -63,6 +63,12 @@ class CtaSpreadTemplate(CtaTemplate):
         self.klines = {}  # K线组件字典: kline_name: kline
 
         self.cur_datetime = None  # 当前Tick时间
+        self.cur_mi_tick = None  # 最新的主力合约tick( vt_symbol)
+        self.cur_99_tick = None  # 最新得指数合约tick( idx_symbol)
+
+        self.cur_mi_price = None  # 当前价（主力合约 vt_symbol)
+        self.cur_99_price = None  # 当前价（tick时，根据tick更新，onBar回测时，根据bar.close更新)
+
         self.cur_act_tick = None  # 最新的主动腿合约tick( act_vt_symbol)
         self.cur_pas_tick = None  # 最新得被动腿合约tick( pas_vt_symbol)
         self.cur_spd_tick = None  # 价差tick
@@ -123,7 +129,6 @@ class CtaSpreadTemplate(CtaTemplate):
         if not self.backtesting:
             self.write_log(u'保存k线缓存数据')
             self.save_klines_to_cache()
-
 
     def save_klines_to_cache(self, kline_names: list = []):
         """
@@ -748,8 +753,8 @@ class CtaSpreadTemplate(CtaTemplate):
                     grid.order_ids.remove(order.vt_orderid)
 
                 # 网格的所有委托单已经执行完毕
-                if len(grid.order_ids) == 0:
-                    grid.order_status = False
+                #if len(grid.order_ids) == 0:
+                #    grid.order_status = False
 
                 self.gt.save()
                 self.write_log(u'网格信息更新:{}'.format(grid.__dict__))
@@ -776,7 +781,7 @@ class CtaSpreadTemplate(CtaTemplate):
                 self.write_log(f'{order_vt_symbol}涨停，不做buy')
                 return
 
-            # 发送委托
+            # FAK发送委托追单
             vt_orderids = self.buy(price=buy_price,
                                    volume=order_volume,
                                    vt_symbol=order_vt_symbol,
@@ -855,8 +860,8 @@ class CtaSpreadTemplate(CtaTemplate):
                     self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
                     grid.order_ids.remove(order.vt_orderid)
 
-                if not grid.order_ids:
-                    grid.order_status = False
+                #if not grid.order_ids:
+                #    grid.order_status = False
 
                 self.gt.save()
             self.active_orders.update({order.vt_orderid: old_order})
@@ -872,7 +877,7 @@ class CtaSpreadTemplate(CtaTemplate):
             return
 
         if not self.trading:
-            self.write_error(u'当前不允许交易')
+            self.write_error(f'{self.cur_datetime} 当前不允许交易')
             return
 
         # 直接更新“未完成委托单”，更新volume,Retry次数
@@ -906,8 +911,8 @@ class CtaSpreadTemplate(CtaTemplate):
                 if order.vt_orderid in grid.order_ids:
                     self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
                     grid.order_ids.remove(order.vt_orderid)
-                if not grid.order_ids:
-                    grid.order_status = False
+                #if not grid.order_ids:
+                #    grid.order_status = False
                 self.gt.save()
                 self.write_log(u'更新网格=>{}'.format(grid.__dict__))
 
@@ -1001,8 +1006,8 @@ class CtaSpreadTemplate(CtaTemplate):
                 if order.vt_orderid in grid.order_ids:
                     self.write_log(f'移除grid中order_ids:{order.vt_orderid}')
                     grid.order_ids.remove(order.vt_orderid)
-                if len(grid.order_ids) == 0:
-                    grid.order_status = False
+                #if len(grid.order_ids) == 0:
+                #    grid.order_status = False
                 self.gt.save()
             self.active_orders.update({order.vt_orderid: old_order})
 
@@ -1047,15 +1052,17 @@ class CtaSpreadTemplate(CtaTemplate):
                     self.active_orders.update({vt_orderid: order_info})
                     ret = self.cancel_order(str(vt_orderid))
                     if not ret:
-                        self.write_log(u'撤单失败,更新状态为撤单成功')
+                        self.write_log(f'{vt_orderid}撤单失败,更新状态为撤单成功')
                         order_info.update({'status': Status.CANCELLED})
                         self.active_orders.update({vt_orderid: order_info})
                     else:
+                        self.write_log(f'{vt_orderid}撤单成功')
                         if order_grid:
                             if vt_orderid in order_grid.order_ids:
+                                self.write_log(f'{vt_orderid}存在网格委托队列{order_grid.order_ids}中，移除')
                                 order_grid.order_ids.remove(vt_orderid)
-                            if len(order_grid.order_ids) == 0:
-                                order_grid.order_status = False
+                            #if len(order_grid.order_ids) == 0:
+                            #    order_grid.order_status = False
                 continue
 
             # 处理状态为‘撤销’的委托单
@@ -1234,10 +1241,10 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'停止状态，不开仓')
             return []
         if not self.allow_trading_open:
-            self.write_log(u'不允许开仓')
+            self.write_log(f'{self.cur_datetime}不允许开仓')
             return []
         if self.force_trading_close:
-            self.write_log(u'强制平仓日，不开仓')
+            self.write_log(f'{self.cur_datetime}强制平仓日，不开仓')
             return []
         # 检查流动性缺失
         if not self.check_liquidity( direction=Direction.SHORT,
@@ -1266,7 +1273,7 @@ class CtaSpreadTemplate(CtaTemplate):
                              f'委托价:{self.cur_act_tick.bid_price_1}')
             return []
 
-        # 开多被动腿
+        # 开多被动腿（FAK或者限价单）
         pas_vt_orderids = self.buy(vt_symbol=self.pas_vt_symbol,
                                    lock=self.pas_exchange==Exchange.CFFEX,
                                    price=self.cur_pas_tick.ask_price_1,
@@ -1303,10 +1310,10 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'停止状态，不开仓')
             return []
         if not self.allow_trading_open:
-            self.write_log(u'不允许开仓')
+            self.write_log(f'{self.cur_datetime}不允许开仓')
             return []
         if self.force_trading_close:
-            self.write_log(u'强制平仓日，不开仓')
+            self.write_log(f'{self.cur_datetime}强制平仓日，不开仓')
             return []
         # 检查流动性缺失
         if not self.check_liquidity(
@@ -1324,7 +1331,7 @@ class CtaSpreadTemplate(CtaTemplate):
             self.write_log(u'价差{}不满足:{}'.format(self.cur_spd_tick.bid_price_1, grid.open_price))
             return []
 
-        # 开多主动腿
+        # 开多主动腿（FAK 或者限价单）
         act_vt_orderids = self.buy(vt_symbol=self.act_vt_symbol,
                                    lock=self.act_exchange==Exchange.CFFEX,
                                    price=self.cur_act_tick.ask_price_1,

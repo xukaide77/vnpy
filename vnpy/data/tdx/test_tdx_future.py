@@ -18,12 +18,12 @@ t2 = FakeStrategy()
 api_01 = TdxFutureData(strategy=t1)
 
 # 获取所有市场信息
-markets = api_01.get_markets()
-str_markets = json.dumps(markets, indent=1, ensure_ascii=False)
-print(u'{}'.format(str_markets))
+#markets = api_01.get_markets()
+#str_markets = json.dumps(markets, indent=1, ensure_ascii=False)
+#print(u'{}'.format(str_markets))
 
 # 获取所有的期货合约明细
-api_01.qry_instrument()
+#api_01.qry_instrument()
 
 # 获取某个合约得最新价
 #price = api_01.get_price('rb2010')
@@ -64,8 +64,8 @@ corr_rate = round(abs(corr.iloc[0, 1]) * 100, 2)
 # api_01.get_bars('IF99', period='1min', callback=t1.display_bar, bar_freq=1)
 
 # 获取bar，只返回 list[dict]
-"""
-result, bars = api_01.get_bars('IF99', period='1min', return_bar=False)
+
+result, bars = api_01.get_bars('SA2101', period='1min', return_bar=False)
 if result:
     print('前十根bar')
     for bar in bars[0:10]:
@@ -73,15 +73,15 @@ if result:
     print('后十根bar')
     for bar in bars[-10:]:
         print(bar)
-"""
+
 # result,datas = api_01.get_transaction_data(symbol='ni1905')
 # api_02 = TdxFutureData(t2)
 # api_02.get_bars('IF99', period='1min', callback=t1.display_bar)
 
 # 获取当前交易日分时数据
-ret,result = api_01.get_transaction_data('NI99')
-for r in result[0:10] + result[-10:]:
-    print(r)
+#ret,result = api_01.get_transaction_data('NI99')
+#for r in result[0:10] + result[-10:]:
+#    print(r)
 
 # 获取历史分时数据
 # ret, result = api_01.get_history_transaction_data('RB99', '20190109')

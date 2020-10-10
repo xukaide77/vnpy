@@ -14,15 +14,16 @@ import requests
 import sys
 import traceback
 from datetime import datetime
-from functools import wraps
+# from functools import wraps
 from vnpy.trader.utility import print_dict
+
 global wechat_lock
 wechat_lock = Lock()
 
 # 这里可以设置UIDS, 多个人可同时接收
-UIDS = ['UID_kZguGPBQPWn41Ni9FK4CgPts2KjU']
+UIDS = ['UID_kZguGPBQPWn41Ni9FK4CgPts2Kjx']
 
-APP_TOKEN = 'AT_aDuiQu41dmAQV2vUMXOaaTDrWyhKJN2z'
+APP_TOKEN = 'AT_aDuiQu41dmAQV2vUMXOaaTDrWyhKJN2x'
 
 
 class wechat_thread(Thread):
@@ -42,7 +43,7 @@ class wechat_thread(Thread):
         self.topic_ids = topic_ids
         self.url = url
         self.lock = wechat_lock
-        self.app_token = app_token if len(app_token) > 0 else APP_TOKEN
+        self.app_token = app_token if app_token is not None and len(app_token) > 0 else APP_TOKEN
 
     def run(self):
         if self.content is None or len(self.content) == 0:
@@ -61,7 +62,7 @@ class wechat_thread(Thread):
             if not response.get('success', False):
                 print(response)
         except Exception as e:
-            print("{} wechat_thread sent failed! ex:{},trace:{}".format(datetime.now(), str(e), traceback.format_exc()),
+            print("{} 微信发送异常 ex:{},trace:{}".format(datetime.now(), str(e), traceback.format_exc()),
                   file=sys.stderr)
             return
 
@@ -84,8 +85,9 @@ def send_wx_msg(*args, **kwargs):
 
     try:
         # 如果存在华富资产的微信模块，则使用
-        from vnpy.trader.util_huafu import sendWeChatMsg, WECHAT_URL,WECHAT_GROUP, WECHAT_LEVEL_INFO, WECHAT_MSG_TYPE_ALERT
-        target=kwargs.get('target','XXX')
+        from vnpy.trader.util_huafu import sendWeChatMsg, WECHAT_URL, WECHAT_GROUP, WECHAT_LEVEL_INFO, \
+            WECHAT_MSG_TYPE_ALERT
+        target = kwargs.get('target', 'XXX')
         sendWeChatMsg(content=content,
                       target=WECHAT_GROUP.get(target),
                       url=kwargs.get('url', WECHAT_URL),
@@ -93,7 +95,8 @@ def send_wx_msg(*args, **kwargs):
                       msg_type=kwargs.get('msg_type', WECHAT_MSG_TYPE_ALERT))
         return
     except Exception as ex:
-       pass
+        print(f'发送微信异常:{str(ex)}', file=sys.stderr)
+        pass
 
     # dict => str, none str => str
     if not isinstance(content, str):
@@ -113,6 +116,7 @@ def send_wx_msg(*args, **kwargs):
     t.daemon = False
     # t.run()
     t.start()
+
 
 if __name__ == '__main__':
     text = u'微信测试标题!!!!\n第二行'

@@ -168,7 +168,7 @@ class StrategyManager(QtWidgets.QFrame):
     """
 
     def __init__(
-        self, cta_manager: CtaManager, cta_engine: CtaEngine, data: dict
+            self, cta_manager: CtaManager, cta_engine: CtaEngine, data: dict
     ):
         """"""
         super(StrategyManager, self).__init__()
@@ -300,6 +300,7 @@ class StrategyManager(QtWidgets.QFrame):
         tns_csv = os.path.abspath(os.path.join(self.cta_engine.get_data_path(), f'{self.strategy_name}_tns.csv'))
         ui_snapshot.show(snapshot_file="", d=snapshot, trade_file=trade_csv, tns_file=tns_csv)
 
+
 class DataMonitor(QtWidgets.QTableWidget):
     """
     Table monitor for parameters and variables.
@@ -408,7 +409,7 @@ class SettingEditor(QtWidgets.QDialog):
     """
 
     def __init__(
-        self, parameters: dict, strategy_name: str = "", class_name: str = ""
+            self, parameters: dict, strategy_name: str = "", class_name: str = ""
     ):
         """"""
         super(SettingEditor, self).__init__()
@@ -477,7 +478,7 @@ class SettingEditor(QtWidgets.QDialog):
                 try:
                     value = type_(value_text)
                 except Exception as ex:
-                    print(f'{name}数据类型转换未指定')
+                    print(f'{name}数据类型转换未指定:{str(ex)}')
                     if isnumber(value_text):
                         value = float(value_text)
                     elif value_text == 'None':
@@ -488,6 +489,7 @@ class SettingEditor(QtWidgets.QDialog):
             setting[name] = value
 
         return setting
+
 
 def isnumber(aString):
     try:

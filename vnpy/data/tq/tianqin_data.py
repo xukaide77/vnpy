@@ -28,14 +28,15 @@ import csv
 # pd.pandas.reset_option(‘参数名’, 参数值)	# 恢复默认相关选项
 
 tick_csv_header = [
-    "datetime","symbol", "exchange", "last_price","highest","lowest","volume","amount","open_interest",
-    "upper_limit","lower_limit","bid_price1","bid_volume1","ask_price1",
-    "ask_volume1","bid_price2","bid_volume2","ask_price2","ask_volume2",
-    "bid_price3","bid_volume3","ask_price3","ask_volume3","bid_price4",
+    "datetime", "symbol", "exchange", "last_price", "highest", "lowest", "volume", "amount", "open_interest",
+    "upper_limit", "lower_limit", "bid_price1", "bid_volume1", "ask_price1",
+    "ask_volume1", "bid_price2", "bid_volume2", "ask_price2", "ask_volume2",
+    "bid_price3", "bid_volume3", "ask_price3", "ask_volume3", "bid_price4",
     "bid_volume4",
-    "ask_price4","ask_volume4",
-    "bid_price5","bid_volume5","ask_price5","ask_volume5"
+    "ask_price4", "ask_volume4",
+    "bid_price5", "bid_volume5", "ask_price5", "ask_volume5"
 ]
+
 
 @lru_cache(maxsize=9999)
 def to_vt_symbol(tq_symbol: str) -> str:
@@ -95,8 +96,8 @@ def generate_tick_from_dict(vt_symbol: str, data: dict) -> TickData:
         volume=int(data["volume"]),
         open_interest=data["open_interest"],
         last_price=float(data["last_price"]),
-        #limit_up=float(data["upper_limit"]) if data["upper_limit"] !='#N/A' else None,
-        #limit_down=float(data["lower_limit"]),
+        # limit_up=float(data["upper_limit"]) if data["upper_limit"] !='#N/A' else None,
+        # limit_down=float(data["lower_limit"]),
         high_price=float(data["highest"]),
         low_price=float(data["lowest"]),
         bid_price_1=float(data["bid_price1"]),
@@ -126,7 +127,7 @@ def generate_tick_from_dict(vt_symbol: str, data: dict) -> TickData:
 class TqFutureData():
 
     def __init__(self, strategy=None):
-        self.strategy = strategy    # 传进来策略实例，这样可以写日志到策略实例
+        self.strategy = strategy  # 传进来策略实例，这样可以写日志到策略实例
 
         self.api = TqApi(TqSim(), url="wss://u.shinnytech.com/t/md/front/mobile")
 
@@ -139,7 +140,7 @@ class TqFutureData():
             with closing(self.api):
                 # 获得 pp2009 tick序列的引用
                 ticks = self.api.get_tick_serial(symbol=tq_symbol, data_length=8964)  # 每个序列最大支持请求 8964 个数据
-                return ticks        # 8964/3/60=49.8分钟
+                return ticks  # 8964/3/60=49.8分钟
         except Exception as ex:
             print(u'获取历史tick数据出错：{},{}'.format(str(ex), traceback.format_exc()))
             return None
@@ -148,7 +149,7 @@ class TqFutureData():
 
         symbol, exchange = extract_vt_symbol(vt_symbol)
         tq_symbol = to_tq_symbol(symbol, exchange)
-        td = DataDownloader(self.api, symbol_list=tq_symbol, dur_sec=0,             # Tick数据为dur_sec=0
+        td = DataDownloader(self.api, symbol_list=tq_symbol, dur_sec=0,  # Tick数据为dur_sec=0
                             start_dt=start_date, end_dt=end_date,
                             csv_file_name=cache_file)
 
@@ -182,7 +183,7 @@ class TqFutureData():
                 with open(file=ticks_file, mode='r', encoding='utf-8', ) as f:
                     reader = csv.DictReader(f=f, fieldnames=tick_csv_header, delimiter=",")
                     for row in reader:
-                        if str(row.get('last_price','nan')) not in['nan','last_price']:
+                        if str(row.get('last_price', 'nan')) not in ['nan', 'last_price']:
                             tick_dict_list.append(row)
 
                 return tick_dict_list
@@ -191,7 +192,7 @@ class TqFutureData():
 
         return []
 
-    def get_bars(self, vt_symbol: str, start_date: datetime=None, end_date: datetime = None):
+    def get_bars(self, vt_symbol: str, start_date: datetime = None, end_date: datetime = None):
         """
         获取历史bar（受限于最大长度8964根bar）
         :param vt_symbol:
@@ -235,7 +236,6 @@ class TqFutureData():
 
         return bars
 
-
     def get_ticks(self, vt_symbol: str, start_date: datetime, end_date: datetime = None):
         """获取历史tick"""
 
@@ -253,7 +253,7 @@ class TqFutureData():
 
         all_ticks = []
         # 轮询每一天，读取缓存数据
-        for n in range(n_days+1):
+        for n in range(n_days + 1):
             trading_date = start_date + timedelta(days=n)
             if trading_date.isoweekday() in [6, 7]:
                 continue
@@ -272,7 +272,7 @@ class TqFutureData():
                 all_ticks.extend(rt_ticks)
         return all_ticks
 
-    def get_runtime_ticks(self, vt_symbol: str, begin_dt: datetime= None):
+    def get_runtime_ticks(self, vt_symbol: str, begin_dt: datetime = None):
         """获取实时历史tick"""
         self.write_log(f"从天勤请求合约:{vt_symbol}的实时的8964条tick数据")
         symbol, exchange = extract_vt_symbol(vt_symbol)
@@ -290,7 +290,7 @@ class TqFutureData():
                       'bid_volume13', 'ask_price4', 'ask_volume14', 'bid_price4', 'bid_volume14',
                       'ask_price5', 'ask_volume15', 'bid_price5', 'bid_volume15', 'volume', 'amount',
                       'open_interest', 'symbol', 'duration']
-        df.drop(['id','average','duration'], axis=1)
+        df.drop(['id', 'average', 'duration'], axis=1)
 
         for index, row in df.iterrows():
             # 日期时间, 成交价, 成交量, 总量, 属性(持仓增减), B1价, B1量, B2价, B2量, B3价, B3量, S1价, S1量, S2价, S2量, S3价, S3量, BS
@@ -341,18 +341,14 @@ if __name__ == '__main__':
     # tqsdk = Query_tqsdk_data(strategy=self)   # 在策略中使用
     tqsdk = TqFutureData()
     # ticks = tqsdk.query_tick_current("pp2009.DCE")
-    #tick_df = tqsdk.query_tick_history_data(vt_symbol="ni2009.SHFE", start_date=pd.to_datetime("2020-07-22"))
-    #print(tick_df)
+    # tick_df = tqsdk.query_tick_history_data(vt_symbol="ni2009.SHFE", start_date=pd.to_datetime("2020-07-22"))
+    # print(tick_df)
 
-    #ticks = tqsdk.get_runtime_ticks("ni2009.SHFE")
+    # ticks = tqsdk.get_runtime_ticks("ni2009.SHFE")
 
-    #print(ticks[0])
+    # print(ticks[0])
 
-    #print(ticks[-1])
+    # print(ticks[-1])
     bars = tqsdk.get_bars(vt_symbol='ni2011.SHFE')
     print(bars[0])
     print(bars[-1])
-
-
-
-

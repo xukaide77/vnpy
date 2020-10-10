@@ -431,8 +431,8 @@ class OmsEngine(BaseEngine):
         self.today_contracts: Dict[str, ContractData] = {}
 
         # 自定义合约
-        self.custom_contracts = {}   # vt_symbol: ContractData
-        self.custom_settings = {}    # symbol: dict
+        self.custom_contracts = {}  # vt_symbol: ContractData
+        self.custom_settings = {}  # symbol: dict
         self.symbol_spd_maping = {}  # symbol: [spd_symbol]
 
         self.prices = {}
@@ -568,7 +568,7 @@ class OmsEngine(BaseEngine):
             return Direction.LONG
         return direction
 
-    def create_spd_position_event(self, symbol, direction ):
+    def create_spd_position_event(self, symbol, direction):
         """创建自定义品种对持仓信息"""
         spd_symbols = self.symbol_spd_maping.get(symbol, [])
         if not spd_symbols:
@@ -614,7 +614,7 @@ class OmsEngine(BaseEngine):
                 continue
 
             # 根据leg1/leg2的volume ratio，计算出最小spd_volume
-            spd_volume = min(int(leg1_pos.volume/leg1_ratio), int(leg2_pos.volume/leg2_ratio))
+            spd_volume = min(int(leg1_pos.volume / leg1_ratio), int(leg2_pos.volume / leg2_ratio))
             if spd_volume <= 0 and spd_pos is None:
                 continue
 
@@ -765,6 +765,7 @@ class OmsEngine(BaseEngine):
     def get_mapping_spd(self, symbol):
         """根据主动腿/被动腿symbol，获取自定义套利对的symbol list"""
         return self.symbol_spd_maping.get(symbol, [])
+
 
 class CustomContract(object):
     """

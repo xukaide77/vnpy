@@ -96,7 +96,7 @@ class BarData(BaseData):
     trading_day: str = ""  # '%Y-%m-%d'
 
     interval: Interval = None  # constant.py Internal 1m, 1h, 1d, 1w .etc
-    interval_num: int = 1   # 5 for 5m, 5h etc
+    interval_num: int = 1  # 5 for 5m, 5h etc
     volume: float = 0
     open_interest: float = 0
     open_price: float = 0
@@ -209,6 +209,7 @@ class TradeData(BaseData):
         self.vt_tradeid = f"{self.gateway_name}.{self.tradeid}"
         self.vt_accountid = f"{self.gateway_name}.{self.accountid}"
 
+
 @dataclass
 class PositionData(BaseData):
     """
@@ -218,7 +219,7 @@ class PositionData(BaseData):
     symbol: str
     exchange: Exchange
     direction: Direction
-    accountid: str = ""   # 账号id
+    accountid: str = ""  # 账号id
     name: str = ""
     volume: float = 0
     frozen: float = 0
@@ -237,6 +238,7 @@ class PositionData(BaseData):
         self.vt_accountid = f"{self.gateway_name}.{self.accountid}"
         if self.name == "":
             self.name = self.vt_symbol
+
 
 @dataclass
 class AccountData(BaseData):
@@ -330,7 +332,7 @@ class ContractData(BaseData):
     option_underlying: str = ""  # vt_symbol of underlying contract
     option_type: OptionType = None
     option_expiry: datetime = None
-    option_index: str = ""   # vt_symbol mapping cur option
+    option_index: str = ""  # vt_symbol mapping cur option
 
     def __post_init__(self):
         """"""

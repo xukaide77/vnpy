@@ -485,7 +485,7 @@ class FutuGateway(BaseGateway):
 
         sys_orderid = ""
         for ix, row in data.iterrows():
-            sys_orderid = str(row.get("order_id",""))
+            sys_orderid = str(row.get("order_id", ""))
             if len(sys_orderid) > 0:
                 self.write_log(f'系统委托号:{sys_orderid}')
                 break

@@ -163,6 +163,7 @@ def get_trading_date(dt: datetime = None):
     else:
         return dt.strftime('%Y-%m-%d')
 
+
 def extract_vt_symbol(vt_symbol: str) -> Tuple[str, Exchange]:
     """
     :return: (symbol, exchange)
@@ -328,6 +329,7 @@ def get_digits(value: float) -> int:
     else:
         return 0
 
+
 def print_dict(d: dict):
     """返回dict的字符串类型"""
     return '\n'.join([f'{key}:{d[key]}' for key in sorted(d.keys())])
@@ -352,9 +354,10 @@ def get_csv_last_dt(file_name, dt_index=0, dt_format='%Y-%m-%d %H:%M:%S', line_l
                 try:
                     last_dt = datetime.strptime(datas[dt_index], dt_format)
                     return last_dt
-                except: # noqa
+                except:  # noqa
                     return None
         return None
+
 
 def append_data(file_name: str, dict_data: dict, field_names: list = [], auto_header=True, encoding='utf8'):
     """
@@ -366,7 +369,7 @@ def append_data(file_name: str, dict_data: dict, field_names: list = [], auto_he
     dict_fieldnames = sorted(list(dict_data.keys())) if len(field_names) == 0 else field_names
 
     try:
-        if not os.path.exists(file_name): # or os.path.getsize(file_name) == 0:
+        if not os.path.exists(file_name):  # or os.path.getsize(file_name) == 0:
             print(u'create csv file:{}'.format(file_name))
             with open(file_name, 'a', encoding='utf8', newline='\n') as csvWriteFile:
                 writer = csv.DictWriter(f=csvWriteFile, fieldnames=dict_fieldnames, dialect='excel')
@@ -410,11 +413,11 @@ def import_module_by_str(import_module_name):
             mod = import_module(loaded_modules)
 
             comp = modules[-1]
-            #if not hasattr(mod, comp):
+            # if not hasattr(mod, comp):
             # loaded_modules = '.'.join([loaded_modules, comp])
             print('realod {}'.format(loaded_modules))
             mod = reload(mod)
-            #else:
+            # else:
             #    print('from {} import {}'.format(loaded_modules, comp))
             comp = getattr(mod, comp)
             return comp
@@ -669,6 +672,7 @@ def load_data_from_pkb2(pkb2_file_name):
         data = pickle.load(f)
         return data
 
+
 def save_data_to_pkb2(data: Any, pkb2_file_name):
     """保存本地缓存的配置地址信息"""
     with bz2.BZ2File(pkb2_file_name, 'wb') as f:
@@ -687,11 +691,11 @@ class BarGenerator:
     """
 
     def __init__(
-        self,
-        on_bar: Callable,
-        window: int = 0,
-        on_window_bar: Callable = None,
-        interval: Interval = Interval.MINUTE
+            self,
+            on_bar: Callable,
+            window: int = 0,
+            on_window_bar: Callable = None,
+            interval: Interval = Interval.MINUTE
     ):
         """Constructor"""
         self.bar: BarData = None
@@ -1087,11 +1091,11 @@ class ArrayManager(object):
         return result[-1]
 
     def macd(
-        self,
-        fast_period: int,
-        slow_period: int,
-        signal_period: int,
-        array: bool = False
+            self,
+            fast_period: int,
+            slow_period: int,
+            signal_period: int,
+            array: bool = False
     ) -> Union[
         Tuple[np.ndarray, np.ndarray, np.ndarray],
         Tuple[float, float, float]
@@ -1179,10 +1183,10 @@ class ArrayManager(object):
         return result[-1]
 
     def boll(
-        self,
-        n: int,
-        dev: float,
-        array: bool = False
+            self,
+            n: int,
+            dev: float,
+            array: bool = False
     ) -> Union[
         Tuple[np.ndarray, np.ndarray],
         Tuple[float, float]
@@ -1199,10 +1203,10 @@ class ArrayManager(object):
         return up, down
 
     def keltner(
-        self,
-        n: int,
-        dev: float,
-        array: bool = False
+            self,
+            n: int,
+            dev: float,
+            array: bool = False
     ) -> Union[
         Tuple[np.ndarray, np.ndarray],
         Tuple[float, float]
@@ -1219,7 +1223,7 @@ class ArrayManager(object):
         return up, down
 
     def donchian(
-        self, n: int, array: bool = False
+            self, n: int, array: bool = False
     ) -> Union[
         Tuple[np.ndarray, np.ndarray],
         Tuple[float, float]
@@ -1235,9 +1239,9 @@ class ArrayManager(object):
         return up[-1], down[-1]
 
     def aroon(
-        self,
-        n: int,
-        array: bool = False
+            self,
+            n: int,
+            array: bool = False
     ) -> Union[
         Tuple[np.ndarray, np.ndarray],
         Tuple[float, float]

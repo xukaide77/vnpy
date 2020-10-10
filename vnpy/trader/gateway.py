@@ -334,7 +334,7 @@ class LocalOrderManager:
     Management tool to support use local order id for trading.
     """
 
-    def __init__(self, gateway: BaseGateway, order_prefix: str = "", order_rjust:int = 8):
+    def __init__(self, gateway: BaseGateway, order_prefix: str = "", order_rjust: int = 8):
         """"""
         self.gateway: BaseGateway = gateway
 
