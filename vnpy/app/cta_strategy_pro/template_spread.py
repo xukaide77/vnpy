@@ -1,4 +1,4 @@
-﻿# 套利模板
+# 套利模板
 # 华富资产 @ 李来佳
 
 import os
@@ -419,7 +419,7 @@ class CtaSpreadTemplate(CtaTemplate):
         if order_info is not None:
             # 委托单记录 =》 找到 Grid
             grid = order_info.get('grid')
-            if grid:
+            if grid and order_info.get('offset', None) == Offset.OPEN:
                 # 更新平均开仓/平仓得价格，数量
                 self.update_grid_trade(trade, grid)
 
