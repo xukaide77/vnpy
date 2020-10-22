@@ -277,7 +277,7 @@ class PortfolioTestingEngine(BackTestingEngine):
                 bar.high_price = float(bar_data['high'])
                 bar.low_price = float(bar_data['low'])
                 bar.volume = int(bar_data['volume'])
-                bar.open_interest = int(bar_data.get('open_interest', 0))
+                bar.open_interest = float(bar_data.get('open_interest', 0))
                 bar.date = bar_datetime.strftime('%Y-%m-%d')
                 bar.time = bar_datetime.strftime('%H:%M:%S')
                 str_td = str(bar_data.get('trading_day', ''))

@@ -798,6 +798,10 @@ class CtaEngine(BaseEngine):
         return True
 
     @lru_cache()
+    def get_exchange(self, symbol):
+        return self.main_engine.get_exchange(symbol)
+
+    @lru_cache()
     def get_name(self, vt_symbol: str):
         """查询合约的name"""
         contract = self.main_engine.get_contract(vt_symbol)
@@ -867,6 +871,9 @@ class CtaEngine(BaseEngine):
 
     def get_contract(self, vt_symbol):
         return self.main_engine.get_contract(vt_symbol)
+
+    def get_custom_contract(self, vt_symbol):
+        return self.main_engine.get_custom_contract(vt_symbol.split('.')[0])
 
     def get_all_contracts(self):
         return self.main_engine.get_all_contracts()
@@ -986,38 +993,47 @@ class CtaEngine(BaseEngine):
         """
         Add a new strategy.
         """
-        if strategy_name in self.strategies:
-            msg = f"创建策略失败，存在重名{strategy_name}"
-            self.write_log(msg=msg,
-                           level=logging.CRITICAL)
-            return False, msg
+        try:
+            if strategy_name in self.strategies:
+                msg = f"创建策略失败，存在重名{strategy_name}"
+                self.write_log(msg=msg,
+                               level=logging.CRITICAL)
+                return False, msg
 
-        strategy_class = self.classes.get(class_name, None)
-        if not strategy_class:
-            msg = f"创建策略失败，找不到策略类{class_name}"
-            self.write_log(msg=msg,
-                           level=logging.CRITICAL)
-            return False, msg
+            strategy_class = self.classes.get(class_name, None)
+            if not strategy_class:
+                msg = f"创建策略失败，找不到策略类{class_name}"
+                self.write_log(msg=msg,
+                               level=logging.CRITICAL)
+                return False, msg
 
-        self.write_log(f'开始添加策略类{class_name}，实例名:{strategy_name}')
-        strategy = strategy_class(self, strategy_name, vt_symbol, setting)
-        self.strategies[strategy_name] = strategy
+            self.write_log(f'开始添加策略类{class_name}，实例名:{strategy_name}')
+            strategy = strategy_class(self, strategy_name, vt_symbol, setting)
+            self.strategies[strategy_name] = strategy
 
-        # Add vt_symbol to strategy map.
-        strategies = self.symbol_strategy_map[vt_symbol]
-        strategies.append(strategy)
+            # Add vt_symbol to strategy map.
+            strategies = self.symbol_strategy_map[vt_symbol]
+            strategies.append(strategy)
 
-        subscribe_symbol_set = self.strategy_symbol_map[strategy_name]
-        subscribe_symbol_set.add(vt_symbol)
+            subscribe_symbol_set = self.strategy_symbol_map[strategy_name]
+            subscribe_symbol_set.add(vt_symbol)
 
-        # Update to setting file.
-        self.update_strategy_setting(strategy_name, setting, auto_init, auto_start)
+            # Update to setting file.
+            self.update_strategy_setting(strategy_name, setting, auto_init, auto_start)
 
-        self.put_strategy_event(strategy)
+            self.put_strategy_event(strategy)
 
-        # 判断设置中是否由自动初始化和自动启动项目
-        if auto_init:
-            self.init_strategy(strategy_name, auto_start=auto_start)
+            # 判断设置中是否由自动初始化和自动启动项目
+            if auto_init:
+                self.init_strategy(strategy_name, auto_start=auto_start)
+
+        except Exception as ex:
+            msg = f'添加策略实例{strategy_name}失败,{str(ex)}'
+            self.write_error(msg)
+            self.write_error(traceback.format_exc())
+            self.send_wechat(msg)
+
+            return False, f'添加策略实例{strategy_name}失败'
 
         return True, f'成功添加{strategy_name}'
 
@@ -1789,7 +1805,7 @@ class CtaEngine(BaseEngine):
             # 其他期货：帐号多单 vs 除了多单， 空单 vs 空单
             if vt_symbol.endswith(".CFFEX"):
                 diff_match = (symbol_pos.get('账号多单', 0) - symbol_pos.get('账号空单', 0)) == (
-                            symbol_pos.get('策略多单', 0) - symbol_pos.get('策略空单', 0))
+                        symbol_pos.get('策略多单', 0) - symbol_pos.get('策略空单', 0))
                 pos_match = symbol_pos.get('账号空单', 0) == symbol_pos.get('策略空单', 0) and \
                             symbol_pos.get('账号多单', 0) == symbol_pos.get('策略多单', 0)
                 match = diff_match
@@ -1803,11 +1819,12 @@ class CtaEngine(BaseEngine):
                             symbol_pos.get('策略多单', 0),
                             symbol_pos.get('策略空单', 0)
                         ))
-                        diff_pos_dict.update({vt_symbol: {"long":symbol_pos.get('账号多单', 0) - symbol_pos.get('策略多单', 0),
-                                                          "short":symbol_pos.get('账号空单', 0) - symbol_pos.get('策略空单', 0)}})
+                        diff_pos_dict.update({vt_symbol: {"long": symbol_pos.get('账号多单', 0) - symbol_pos.get('策略多单', 0),
+                                                          "short": symbol_pos.get('账号空单', 0) - symbol_pos.get('策略空单',
+                                                                                                              0)}})
             else:
                 match = round(symbol_pos.get('账号空单', 0), 7) == round(symbol_pos.get('策略空单', 0), 7) and \
-                            round(symbol_pos.get('账号多单', 0), 7) == round(symbol_pos.get('策略多单', 0), 7)
+                        round(symbol_pos.get('账号多单', 0), 7) == round(symbol_pos.get('策略多单', 0), 7)
             # 多空都一致
             if match:
                 msg = u'{}多空都一致.{}\n'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False))
@@ -1862,7 +1879,7 @@ class CtaEngine(BaseEngine):
         else:
             self.write_log(u'账户持仓与策略一致')
             if len(diff_pos_dict) > 0:
-                for k,v in diff_pos_dict.items():
+                for k, v in diff_pos_dict.items():
                     self.write_log(f'{k} 存在大于策略的轧差持仓:{v}')
             return True, compare_info
 

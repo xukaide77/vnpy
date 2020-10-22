@@ -9,6 +9,8 @@ import sys
 import traceback
 import talib as ta
 import numpy as np
+import pandas as pd
+import csv
 
 from collections import OrderedDict
 from datetime import datetime, timedelta
@@ -18,6 +20,12 @@ from vnpy.trader.object import RenkoBarData
 from vnpy.trader.utility import round_to
 from vnpy.trader.constant import Direction, Color
 from vnpy.component.cta_period import CtaPeriod, Period
+
+
+try:
+    from vnpy.component.chanlun import ChanGraph, ChanLibrary
+except Exception as ex:
+    print('can not import pyChanlun from vnpy.component.chanlun')
 
 
 class CtaRenkoBar(object):
@@ -75,6 +83,7 @@ class CtaRenkoBar(object):
         self.param_list.append('para_kdj_smooth_len')
 
         self.param_list.append('para_active_kf')  # 卡尔曼均线
+        self.param_list.append('para_kf_obscov_len')  # 卡尔曼均线观测方差的长度
 
         self.param_list.append('para_active_skd')  # 摆动指标
         self.param_list.append('para_skd_fast_len')
@@ -91,6 +100,7 @@ class CtaRenkoBar(object):
         self.param_list.append('para_yb_ref')
 
         self.param_list.append('para_golden_n')  # 黄金分割
+        self.param_list.append('para_active_chanlun')  # 激活缠论
 
         # 输入参数
 
@@ -322,6 +332,7 @@ class CtaRenkoBar(object):
 
         # 卡尔曼过滤器
         self.para_active_kf = False
+        self.para_kf_obscov_len = 1  # t+1时刻的观测协方差
         self.kf = None
         self.line_state_mean = []
         self.line_state_covar = []
@@ -389,6 +400,7 @@ class CtaRenkoBar(object):
         self.is_7x24 = False
 
         # (实时运行时，或者addbar小于bar得周期时，不包含最后一根Bar）
+        self.index_list = []
         self.open_array = np.zeros(self.max_hold_bars)  # 与lineBar一致得开仓价清单
         self.open_array[:] = np.nan
         self.high_array = np.zeros(self.max_hold_bars)  # 与lineBar一致得最高价清单
@@ -405,6 +417,16 @@ class CtaRenkoBar(object):
         self.mid5_array = np.zeros(self.max_hold_bars)  # 收盘价*2/开仓价/最高/最低价 的平均价
         self.mid5_array[:] = np.nan
 
+        self.para_active_chanlun = False  # 是否激活缠论
+        self.chan_lib = None
+        self.chan_graph = None
+        self.chanlun_calculated = False  # 当前bar是否计算过
+        self._fenxing_list = []  # 分型列表
+        self._bi_list = []  # 笔列表
+        self._bi_zs_list = []  # 笔中枢列表
+        self._duan_list = []  # 段列表
+        self._duan_zs_list = []  # 段中枢列表
+
         # 导出到csv文件
         self.export_filename = None
         self.export_fields = []
@@ -417,6 +439,7 @@ class CtaRenkoBar(object):
 
         # 事件回调函数
         self.cb_dict = {}
+
         if setting:
             self.setParam(setting)
 
@@ -428,6 +451,13 @@ class CtaRenkoBar(object):
             # 使用千分之n高度，修改第一个值
             if self.kilo_height > 0:
                 self.height = self.price_tick * self.kilo_height
+
+            if self.para_active_chanlun:
+                try:
+                    self.chan_lib = ChanLibrary(bi_style=2, duan_style=1)
+                except:
+                    self.write_log(u'导入缠论组件失败')
+                    self.chan_lib = None
 
     def __getstate__(self):
         """移除Pickle dump()时不支持的Attribute"""
@@ -508,7 +538,8 @@ class CtaRenkoBar(object):
                                         observation_matrices=[1],
                                         initial_state_mean=self.last_price_list[-1],
                                         initial_state_covariance=1,
-                                        transition_covariance=0.01)
+                                        transition_covariance=0.01,
+                                        observation_covariance=self.para_kf_obscov_len)
             state_means, state_covariances = self.tick_kf.filter(np.array(self.last_price_list, dtype=float))
             m = state_means[-1].item()
             c = state_covariances[-1].item()
@@ -600,6 +631,9 @@ class CtaRenkoBar(object):
             # 新添加得bar比现有得bar时间晚，不添加
             if bar.datetime < self.line_bar[-1].datetime:
                 return
+            if bar.datetime == self.line_bar[-1].datetime:
+                if bar.close_price != self.line_bar[-1].close_price:
+                    bar.datetime += timedelta(microseconds=1)
 
         # 更新最后价格
         self.cur_price = bar.close_price
@@ -615,7 +649,9 @@ class CtaRenkoBar(object):
         bar_mid4 = round((2 * bar.close_price + bar.high_price + bar.low_price) / 4, self.round_n)
         bar_mid5 = round((2 * bar.close_price + bar.open_price + bar.high_price + bar.low_price) / 5, self.round_n)
 
-        # 扩展open,close,high,low numpy array列表
+        # 扩展时间索引,open,close,high,low numpy array列表 平移更新序列最新值
+        self.index_list.append(bar.datetime.strftime('%Y-%m-%d %H:%M:%S.%f'))
+
         self.open_array[:-1] = self.open_array[1:]
         self.open_array[-1] = bar.open_price
 
@@ -654,7 +690,9 @@ class CtaRenkoBar(object):
         elif bar.close_price < bar.open_price:
             bar.color = Color.BLUE
 
-        # 扩展open,close,high,low 列表
+        # 扩展时间索引,open,close,high,low numpy array列表 平移更新序列最新值
+        self.index_list.append(bar.datetime.strftime('%Y-%m-%d %H:%M:%S.%f'))
+
         self.open_array[:-1] = self.open_array[1:]
         self.open_array[-1] = bar.open_price
 
@@ -708,6 +746,8 @@ class CtaRenkoBar(object):
         self.export_to_csv(bar)
 
         self.runtime_recount()
+
+        self.chanlun_calculated = False
 
         # 回调上层调用者
         self.cb_on_bar(bar, self.name)
@@ -2848,13 +2888,14 @@ class CtaRenkoBar(object):
                                        observation_matrices=[1],
                                        initial_state_mean=self.close_array[-1],
                                        initial_state_covariance=1,
-
-                                       transition_covariance=0.01)
+                                       transition_covariance=0.01,
+                                       observation_covariance = self.para_kf_obscov_len
+                )
             except Exception:
                 self.write_log(u'导入卡尔曼过滤器失败,需先安装 pip install pykalman')
                 self.para_active_kf = False
 
-            state_means, state_covariances = self.kf.filter(np.array(self.close_array, dtype=float))
+            state_means, state_covariances = self.kf.filter(np.array(self.close_array[-1], dtype=float))
             m = state_means[-1].item()
             c = state_covariances[-1].item()
         else:
@@ -3521,6 +3562,432 @@ class CtaRenkoBar(object):
                 self.write_log(u'call back event{} exception:{}'.format(self.CB_ON_PERIOD, str(ex)))
                 self.write_log(u'traceback:{}'.format(traceback.format_exc()))
 
+    def __count_chanlun(self):
+        """重新计算缠论"""
+        if self.chanlun_calculated:
+            return
+
+        if not self.chan_lib:
+            return
+
+        if self.bar_len <= 3:
+            return
+
+        if self.chan_graph is not None:
+            del self.chan_graph
+            self.chan_graph = None
+        self.chan_graph = ChanGraph(chan_lib=self.chan_lib,
+                                    index=self.index_list[-self.bar_len+1:],
+                                    high=self.high_array[-self.bar_len+1:],
+                                    low=self.low_array[-self.bar_len+1:])
+        self._fenxing_list = self.chan_graph.fenxing_list
+        self._bi_list = self.chan_graph.bi_list
+        self._bi_zs_list = self.chan_graph.bi_zhongshu_list
+        self._duan_list = self.chan_graph.duan_list
+        self._duan_zs_list = self.chan_graph.duan_zhongshu_list
+
+        self.chanlun_calculated = True
+
+    @property
+    def fenxing_list(self):
+        if not self.chanlun_calculated:
+            self.__count_chanlun()
+        return self._fenxing_list
+
+    @property
+    def bi_list(self):
+        if not self.chanlun_calculated:
+            self.__count_chanlun()
+        return self._bi_list
+
+    @property
+    def bi_zs_list(self):
+        if not self.chanlun_calculated:
+            self.__count_chanlun()
+        return self._bi_zs_list
+
+    @property
+    def duan_list(self):
+        if not self.chanlun_calculated:
+            self.__count_chanlun()
+        return self._duan_list
+
+    @property
+    def duan_zs_list(self):
+        if not self.chanlun_calculated:
+            self.__count_chanlun()
+        return self._duan_zs_list
+
+    def is_bi_beichi_inside_duan(self, direction):
+        """当前段内的笔，是否形成背驰"""
+        if len(self._duan_list) == 0:
+            return False
+
+        # Direction => int
+        if isinstance(direction, Direction):
+            direction = 1 if direction == Direction.LONG else -1
+
+        # 分型需要确认
+        if self.fenxing_list[-1].is_rt:
+            return False
+
+        # 当前段
+        duan = self._duan_list[-1]
+        if duan.direction != direction:
+            return False
+
+        # 当前段包含的分笔，必须大于等于5(缠论里面，如果只有三个分笔，背驰的力度比较弱）
+        if len(duan.bi_list) < 5:
+            return False
+
+        # 获取最近2个匹配direction的分型
+        fx_list = [fx for fx in self._fenxing_list[-4:] if fx.direction == direction]
+        if len(fx_list) != 2:
+            return False
+
+        # 这里是排除段的信号出错，获取了很久之前的一段，而不是最新的一段
+        if duan.end < fx_list[0].index:
+            return False
+
+        # 分笔与段同向
+        if duan.bi_list[-1].direction != direction \
+                or duan.bi_list[-3].direction != direction \
+                or duan.bi_list[-5].direction != direction:
+            return False
+
+        # 背驰: 同向分笔，逐笔提升，最后一笔，比上一同向笔，短,斜率也比上一同向笔小
+        if direction == 1:
+            if duan.bi_list[-1].low > duan.bi_list[-3].low > duan.bi_list[-5].low \
+                and duan.bi_list[-1].low > duan.bi_list[-5].high \
+                and duan.bi_list[-1].height < duan.bi_list[-3].height \
+                and duan.bi_list[-1].atan < duan.bi_list[-3].atan:
+                return True
+
+        if direction == -1:
+            if duan.bi_list[-1].high < duan.bi_list[-3].high < duan.bi_list[-5].high \
+                and duan.bi_list[-1].high < duan.bi_list[-5].low \
+                    and duan.bi_list[-1].height < duan.bi_list[-3].height\
+                    and duan.bi_list[-1].atan < duan.bi_list[-3].atan:
+                return True
+
+        return False
+
+    def is_fx_macd_divergence(self, direction):
+        """
+        分型的macd背离
+        :param direction: 1，-1 或者 Direction.LONG（判断是否顶背离）, Direction.SHORT（判断是否底背离）
+
+        :return:
+        """
+        if isinstance(direction, Direction):
+            direction = 1 if direction == Direction.LONG else -1
+        # 当前段
+        duan = self._duan_list[-1]
+
+        if duan.direction != direction:
+            return False
+
+        # 当前段包含的分笔，必须大于3
+        if len(duan.bi_list) <= 3:
+            return False
+
+        # 获取最近2个匹配direction的分型
+        fx_list = [fx for fx in self._fenxing_list[-4:] if fx.direction == direction]
+        if len(fx_list) != 2:
+            return False
+
+        # 这里是排除段的信号出错，获取了很久之前的一段，而不是最新的一段
+        if duan.end < fx_list[0].index:
+            return False
+
+        pre_dif = self.get_dif_by_dt(fx_list[0].index)
+        cur_dif = self.get_dif_by_dt(fx_list[1].index)
+        if pre_dif is None or cur_dif is None:
+            return False
+        if direction == 1:
+            # 前顶分型顶部价格
+            pre_price = fx_list[0].high
+            # 当前顶分型顶部价格
+            cur_price = fx_list[1].high
+            if pre_price < cur_price and pre_dif >= cur_dif and 0 < self.line_dif[-1] < self.line_dif[-2]:
+                return True
+        else:
+            pre_price = fx_list[0].low
+            cur_price = fx_list[1].low
+            if pre_price > cur_price and pre_dif <= cur_dif and self.line_dif[-2] < self.line_dif[-1] < 0:
+                return True
+
+        return False
+
+    def is_2nd_opportunity(self, direction):
+        """
+        是二买、二卖机会
+        【二买】当前线段下行，最后2笔不在线段中，最后一笔与下行线段同向，该笔底部不破线段底部，底分型出现且确认
+        【二卖】当前线段上行，最后2笔不在线段中，最后一笔与上行线段同向，该笔顶部不破线段顶部，顶分型出现且确认
+        :param direction: 1、Direction.LONG, 当前线段的方向, 判断是否二卖机会； -1 Direction.SHORT， 判断是否二买
+        :return:
+        """
+        # Direction => int
+        if isinstance(direction, Direction):
+            direction = 1 if direction == Direction.LONG else -1
+
+        # 具备段
+        if len(self.duan_list) < 1:
+            return False
+        cur_duan = self.duan_list[-1]
+        if cur_duan.direction != direction:
+            return False
+
+        # 当前段到最新bar之间的笔列表（此时未出现中枢）
+        extra_bi_list = [bi for bi in self.bi_list[-3:] if bi.end > cur_duan.end]
+        if len(extra_bi_list) < 2:
+            return False
+
+        # 最后一笔是同向
+        if extra_bi_list[-1].direction != direction:
+            return False
+
+        # 线段外一笔的高度，不能超过线段最后一笔高度
+        if extra_bi_list[0].height > cur_duan.bi_list[-1].height:
+            return False
+
+        # 最后一笔的高度，不能超过最后一段的高度的黄金分割38%
+        if extra_bi_list[-1].height > cur_duan.height * 0.38:
+            return False
+
+        # 最后的分型，不是实时。
+        if not self.fenxing_list[-1].is_rt:
+            return True
+
+        return False
+
+    def is_contain_zs_inside_duan(self, direction, zs_num):
+        """最近段，符合方向，并且至少包含zs_num个中枢"""
+
+        # Direction => int
+        if isinstance(direction, Direction):
+            direction = 1 if direction == Direction.LONG else -1
+
+        # 具备中枢
+        if len(self.bi_zs_list) < zs_num:
+            return False
+        # 具备段
+        if len(self.duan_list) < 1:
+            return False
+
+        cur_duan = self.duan_list[-1]
+        if cur_duan.direction != direction:
+            return False
+
+        # 段的开始时间，至少大于前zs_num个中枢的结束时间
+        if cur_duan.start > self.bi_zs_list[-zs_num].end:
+            return False
+
+        return True
+
+    def is_contain_zs_with_direction(self, start, direction, zs_num):
+        """从start开始计算，至少包含zs_num(>1)个中枢，且最后两个中枢符合方向"""
+
+        if zs_num < 2:
+            return False
+
+        # Direction => int
+        if isinstance(direction, Direction):
+            direction = 1 if direction == Direction.LONG else -1
+
+        # 具备中枢
+        if len(self.bi_zs_list) < zs_num:
+            return False
+
+        bi_zs_list = [zs for zs in self.bi_zs_list[-zs_num:] if zs.end > start]
+
+        if len(bi_zs_list) != zs_num:
+            return False
+
+        if direction == 1 and bi_zs_list[-2].high < bi_zs_list[-1].high:
+            return True
+
+        if direction == -1 and bi_zs_list[-2].high > bi_zs_list[-1].high:
+            return True
+
+        return False
+
+    def is_zs_beichi_inside_duan(self, direction):
+        """是否中枢盘整背驰，进入笔、离去笔，高度，能量背驰"""
+
+        # Direction => int
+        if isinstance(direction, Direction):
+            direction = 1 if direction == Direction.LONG else -1
+
+        # 具备中枢
+        if len(self.bi_zs_list) < 1:
+            return False
+        # 具备段
+        if len(self.duan_list) < 1:
+            return False
+        # 最后线段
+        cur_duan = self.duan_list[-1]
+        if cur_duan.direction != direction:
+            return False
+
+        # 线段内的笔中枢（取前三个就可以了）
+        zs_list_inside_duan = [zs for zs in self.bi_zs_list[-3:] if zs.start >= cur_duan.start]
+
+        # 无中枢，或者超过1个中枢，都不符合中枢背驰
+        if len(zs_list_inside_duan) != 1:
+            return False
+        # 当前中枢
+        cur_zs = zs_list_inside_duan[0]
+
+        # 当前中枢最后一笔，与段最后一笔不一致
+        if cur_duan.bi_list[-1].end != cur_zs.bi_list[-1].end:
+            return False
+
+        # 分型需要确认
+        if self.fenxing_list[-1].is_rt:
+            return False
+
+        # 找出中枢得进入笔
+        entry_bi = cur_zs.bi_list[0]
+        if entry_bi.direction != direction:
+            # 找出中枢之前，与段同向得笔
+            before_bi_list = [bi for bi in cur_duan.bi_list if bi.start < entry_bi.start and bi.direction==direction]
+            # 中枢之前得同向笔，不存在（一般不可能，因为中枢得第一笔不同向，该中枢存在与段中间)
+            if len(before_bi_list) == 0:
+                return False
+            entry_bi = before_bi_list[-1]
+
+        # 中枢第一笔，与最后一笔，比较力度和能量
+        if entry_bi.height > cur_zs.bi_list[-1].height\
+            and entry_bi.atan > cur_zs.bi_list[-1].atan:
+            return True
+
+        return False
+
+    def is_zs_fangda(self, cur_bi_zs = None, start=False, last_bi=False):
+        """
+        判断中枢，是否为放大型中枢。
+        中枢放大，一般是反向力量的强烈试探导致；
+        cur_bi_zs: 指定的笔中枢，若不指定，则默认为最后一个中枢
+        start: True，从中枢开始的笔进行计算前三， False： 从最后三笔计算
+        last_bi: 采用缺省最后一笔时，是否要求最后一笔，必须等于中枢得最后一笔
+        """
+        if cur_bi_zs is None:
+            # 具备中枢
+            if len(self.bi_zs_list) < 1:
+                return False
+            cur_bi_zs = self.bi_zs_list[-1]
+            if last_bi:
+                cur_bi = self.bi_list[-1]
+                # 要求最后一笔，必须等于中枢得最后一笔
+                if cur_bi.start != cur_bi_zs.bi_list[-1].start:
+                    return False
+
+        if len(cur_bi_zs.bi_list) < 3:
+            return False
+
+        # 从开始前三笔计算
+        if start and cur_bi_zs.bi_list[2].height > cur_bi_zs.bi_list[1].height > cur_bi_zs.bi_list[0].height:
+            return True
+
+        # 从最后的三笔计算
+        if not start and cur_bi_zs.bi_list[-1].height > cur_bi_zs.bi_list[-2].height > cur_bi_zs.bi_list[-3].height:
+            return True
+
+        return False
+
+    def is_zs_shoulian(self, cur_bi_zs=None, start=False, last_bi=False):
+        """
+        判断中枢，是否为收殓型中枢。
+        中枢收敛，一般是多空力量的趋于平衡，如果是段中的第二个或以上中枢，可能存在变盘；
+        cur_bi_zs: 指定的中枢，或者最后一个中枢
+       start: True，从中枢开始的笔进行计算前三， False： 从最后三笔计算
+        """
+        if cur_bi_zs is None:
+            # 具备中枢
+            if len(self.bi_zs_list) < 1:
+                return False
+
+            cur_bi_zs = self.bi_zs_list[-1]
+            if last_bi:
+                cur_bi = self.bi_list[-1]
+                # 要求最后一笔，必须等于中枢得最后一笔
+                if cur_bi.start != cur_bi_zs.bi_list[-1].start:
+                    return False
+
+        if len(cur_bi_zs.bi_list) < 3:
+            return False
+
+        if start and cur_bi_zs.bi_list[2].height < cur_bi_zs.bi_list[1].height < cur_bi_zs.bi_list[0].height:
+            return True
+
+        if not start and cur_bi_zs.bi_list[-1].height < cur_bi_zs.bi_list[-2].height < cur_bi_zs.bi_list[-3].height:
+            return True
+
+        return False
+
+    def is_zoushi_beichi(self, direction):
+        """
+        判断是否走势背驰
+        :param direction:
+        :return:
+        """
+        # Direction => int
+        if isinstance(direction, Direction):
+            direction = 1 if direction == Direction.LONG else -1
+
+        # 具备中枢
+        if len(self.bi_zs_list) < 1:
+            return False
+        # 具备段
+        if len(self.duan_list) < 1:
+            return False
+        # 最后线段
+        cur_duan = self.duan_list[-1]
+        if cur_duan.direction != direction:
+            return False
+
+        # 线段内的笔中枢（取前三个就可以了）
+        zs_list_inside_duan = [zs for zs in self.bi_zs_list[-3:] if zs.start >= cur_duan.start]
+
+        # 少于2个中枢，都不符合走势背驰
+        if len(zs_list_inside_duan) < 2:
+            return False
+        # 当前中枢
+        cur_zs = zs_list_inside_duan[-1]
+        # 上一个中枢
+        pre_zs = zs_list_inside_duan[-2]
+        bi_list_between_zs = [bi for bi in cur_duan.bi_list if bi.direction == direction and bi.end > pre_zs.end and bi.start < cur_zs.start]
+        if len(bi_list_between_zs) ==0:
+            return False
+
+        # 最后一笔，作为2个中枢间的笔
+        bi_between_zs = bi_list_between_zs[-1]
+
+        bi_list_after_cur_zs = [bi for bi in cur_duan.bi_list if bi.direction==direction and bi.end > cur_zs.end]
+        if len(bi_list_after_cur_zs) == 0:
+            return False
+
+        # 离开中枢的一笔
+        bi_leave_cur_zs = bi_list_after_cur_zs[0]
+
+        # 离开中枢的一笔，不是段的最后一笔
+        if bi_leave_cur_zs.start != cur_duan.bi_list[-1].start:
+            return False
+
+        # 离开中枢的一笔，不是最后一笔
+        if bi_leave_cur_zs.start != self.bi_list[-1].start:
+            return False
+
+        fx = [fx for fx in self.fenxing_list[-2:] if fx.direction==direction][-1]
+        if fx.is_rt:
+           return False
+
+        # 中枢间的分笔，能量大于最后分笔，形成走势背驰
+        if bi_between_zs.height > bi_leave_cur_zs.height and bi_between_zs.atan > bi_leave_cur_zs.atan:
+            return True
+
+        return False
     # ----------------------------------------------------------------------
     def write_log(self, content):
         """记录CTA日志"""

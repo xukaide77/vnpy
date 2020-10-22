@@ -1240,7 +1240,7 @@ class BackTestingEngine(object):
             active_exchange = self.get_exchange(active_symbol)
             active_vt_symbol = active_symbol + '.' + active_exchange.value
             passive_exchange = self.get_exchange(passive_symbol)
-            # passive_vt_symbol = active_symbol + '.' + passive_exchange.value
+            passive_vt_symbol = passive_symbol + '.' + passive_exchange.value
             # 主动腿成交记录
             act_trade = TradeData(gateway_name=self.gateway_name,
                                   symbol=active_symbol,
@@ -1438,10 +1438,10 @@ class BackTestingEngine(object):
                     # 如果当前没有空单，属于异常行为
                     if len(self.short_position_list) == 0:
                         self.write_error(u'异常!没有空单持仓，不能cover')
-                        raise Exception(u'异常!没有空单持仓，不能cover')
+                        # raise Exception(u'异常!没有空单持仓，不能cover')
                         return
 
-                    cur_short_pos_list = [s_pos.volume for s_pos in self.short_position_list]
+                    cur_short_pos_list = [s_pos.volume for s_pos in self.short_position_list if s_pos.vt_symbol == trade.vt_symbol]
 
                     self.write_log(u'{}当前空单:{}'.format(trade.vt_symbol, cur_short_pos_list))
 
@@ -1450,9 +1450,13 @@ class BackTestingEngine(object):
                                   val.vt_symbol == trade.vt_symbol and val.strategy_name == trade.strategy_name]
 
                     if len(pop_indexs) < 1:
-                        self.write_error(u'异常，{}没有对应symbol:{}的空单持仓'.format(trade.strategy_name, trade.vt_symbol))
-                        raise Exception(u'realtimeCalculate2() Exception,没有对应symbol:{0}的空单持仓'.format(trade.vt_symbol))
-                        return
+                        if 'spd' in vt_tradeid:
+                            self.write_error(f'没有{trade.strategy_name}对应的symbol:{trade.vt_symbol}的空单持仓, 继续')
+                            break
+                        else:
+                            self.write_error(u'异常，{}没有对应symbol:{}的空单持仓, 终止'.format(trade.strategy_name, trade.vt_symbol))
+                            # raise Exception(u'realtimeCalculate2() Exception,没有对应symbol:{0}的空单持仓'.format(trade.vt_symbol))
+                            return
 
                     pop_index = pop_indexs[0]
                     # 从未平仓的空头交易
@@ -1494,7 +1498,7 @@ class BackTestingEngine(object):
                         self.trade_pnl_list.append(t)
 
                         # 非自定义套利对，才更新到策略盈亏
-                        if not open_trade.vt_symbol.endswith('SPD'):
+                        if not (open_trade.vt_symbol.endswith('SPD') or open_trade.vt_symbol.endswith('SPD99')):
                             # 更新策略实例的累加盈亏
                             self.pnl_strategy_dict.update(
                                 {open_trade.strategy_name: self.pnl_strategy_dict.get(open_trade.strategy_name,
@@ -1506,7 +1510,9 @@ class BackTestingEngine(object):
                                         open_trade.volume, result.pnl, result.commission)
 
                             self.write_log(msg)
-                        result_list.append(result)
+
+                            # 添加到交易结果汇总
+                            result_list.append(result)
 
                         if g_result is None:
                             if cover_volume > 0:
@@ -1569,6 +1575,9 @@ class BackTestingEngine(object):
 
                             self.write_log(msg)
 
+                            # 添加到交易结果汇总
+                            result_list.append(result)
+
                         # 更新（减少）开仓单的volume,重新推进开仓单列表中
                         open_trade.volume = remain_volume
                         self.write_log(u'更新（减少）开仓单的volume,重新推进开仓单列表中:{}'.format(open_trade.volume))
@@ -1577,7 +1586,7 @@ class BackTestingEngine(object):
                         self.write_log(u'当前空单:{}'.format(cur_short_pos_list))
 
                         cover_volume = 0
-                        result_list.append(result)
+
 
                         if g_result is not None:
                             # 更新组合的数据
@@ -1606,18 +1615,21 @@ class BackTestingEngine(object):
                 while sell_volume > 0:
                     if len(self.long_position_list) == 0:
                         self.write_error(f'异常，没有{trade.vt_symbol}的多仓')
-                        raise RuntimeError(u'realtimeCalculate2() Exception,没有开多单')
+                        # raise RuntimeError(u'realtimeCalculate2() Exception,没有开多单')
                         return
 
                     pop_indexs = [i for i, val in enumerate(self.long_position_list) if
                                   val.vt_symbol == trade.vt_symbol and val.strategy_name == trade.strategy_name]
                     if len(pop_indexs) < 1:
-                        self.write_error(f'没有{trade.strategy_name}对应的symbol{trade.vt_symbol}多单数据,')
-                        raise RuntimeError(
-                            f'realtimeCalculate2() Exception,没有对应的symbol{trade.vt_symbol}多单数据,')
-                        return
+                        if 'spd' in vt_tradeid:
+                            self.write_error(f'没有{trade.strategy_name}对应的symbol:{trade.vt_symbol}多单数据, 继续')
+                            break
+                        else:
+                            self.write_error(f'没有{trade.strategy_name}对应的symbol:{trade.vt_symbol}多单数据, 终止')
+                            # raise RuntimeError(f'realtimeCalculate2() Exception,没有对应的symbol:{trade.vt_symbol}多单数据,')
+                            return
 
-                    cur_long_pos_list = [s_pos.volume for s_pos in self.long_position_list]
+                    cur_long_pos_list = [s_pos.volume for s_pos in self.long_position_list if s_pos.vt_symbol == trade.vt_symbol]
 
                     self.write_log(u'{}当前多单:{}'.format(trade.vt_symbol, cur_long_pos_list))
 
@@ -1669,7 +1681,9 @@ class BackTestingEngine(object):
                                         open_trade.volume, result.pnl, result.commission)
 
                             self.write_log(msg)
-                        result_list.append(result)
+
+                            # 添加到交易结果汇总
+                            result_list.append(result)
 
                         if g_result is None:
                             if sell_volume > 0:
@@ -1728,13 +1742,14 @@ class BackTestingEngine(object):
                                         result.commission)
 
                             self.write_log(msg)
+                            # 添加到交易结果汇总
+                            result_list.append(result)
 
                         # 减少开多volume,重新推进多单持仓列表中
                         open_trade.volume = remain_volume
                         self.long_position_list.append(open_trade)
 
                         sell_volume = 0
-                        result_list.append(result)
 
                         if g_result is not None:
                             # 更新组合的数据
@@ -1786,8 +1801,11 @@ class BackTestingEngine(object):
                     continue
                 # 当前空单保证金
                 if self.use_margin:
-                    cur_occupy_money = max(self.get_price(t.vt_symbol), t.price) * abs(t.volume) * self.get_size(
-                        t.vt_symbol) * self.get_margin_rate(t.vt_symbol)
+                    try:
+                        cur_occupy_money = max(self.get_price(t.vt_symbol), t.price) * abs(t.volume) * self.get_size(
+                            t.vt_symbol) * self.get_margin_rate(t.vt_symbol)
+                    except Exception as ex:
+                        self.write_error(ex)
                 else:
                     cur_occupy_money = self.get_price(t.vt_symbol) * abs(t.volume) * self.get_size(
                         t.vt_symbol) * self.get_margin_rate(t.vt_symbol)

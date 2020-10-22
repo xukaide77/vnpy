@@ -8,6 +8,7 @@ from .engine import CtaEngine
 from .template import (
     Direction,
     Offset,
+    Exchange,
     Status,
     Color,
     TickData,

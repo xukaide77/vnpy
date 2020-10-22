@@ -507,6 +507,8 @@ class OmsEngine(BaseEngine):
         self.main_engine.get_position = self.get_position
         self.main_engine.get_account = self.get_account
         self.main_engine.get_contract = self.get_contract
+        self.main_engine.get_exchange = self.get_exchange
+        self.main_engine.get_custom_contract = self.get_custom_contract
         self.main_engine.get_all_ticks = self.get_all_ticks
         self.main_engine.get_all_orders = self.get_all_orders
         self.main_engine.get_all_trades = self.get_all_trades
@@ -650,6 +652,13 @@ class OmsEngine(BaseEngine):
         self.today_contracts[contract.vt_symbol] = contract
         self.today_contracts[contract.symbol] = contract
 
+    def get_exchange(self, symbol: str) -> Exchange:
+        """获取合约对应的交易所"""
+        contract = self.contracts.get(symbol, None)
+        if contract is None:
+            return Exchange.LOCAL
+        return contract.exchange
+
     def get_tick(self, vt_symbol: str) -> Optional[TickData]:
         """
         Get latest market tick data by vt_symbol.
@@ -746,6 +755,27 @@ class OmsEngine(BaseEngine):
             ]
             return active_orders
 
+    def get_custom_contract(self, symbol):
+        """
+        获取自定义合约的设置
+        :param symbol:    "pb2012-1-pb2101-1-CJ"
+        :return: {
+        "name": "pb跨期价差",
+        "exchange": "SPD",
+        "leg1_symbol": "pb2012",
+        "leg1_exchange": "SHFE",
+        "leg1_ratio": 1,
+        "leg2_symbol": "pb2101",
+        "leg2_exchange": "SHFE",
+        "leg2_ratio": 1,
+        "is_spread": true,
+        "size": 1,
+        "margin_rate": 0.1,
+        "price_tick": 5
+        }
+        """
+        return self.custom_settings.get(symbol, None)
+
     def get_all_custom_contracts(self, rtn_setting=False):
         """
         获取所有自定义合约
@@ -759,6 +789,7 @@ class OmsEngine(BaseEngine):
 
         if len(self.custom_contracts) == 0:
             c = CustomContract()
+            self.custom_settings = c.get_config()
             self.custom_contracts = c.get_contracts()
         return self.custom_contracts
 

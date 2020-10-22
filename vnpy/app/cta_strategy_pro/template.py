@@ -1160,7 +1160,7 @@ class CtaProFutureTemplate(CtaProTemplate):
         :param trade:
         :return:
         """
-        self.write_log(u'{},交易更新事件:{},当前持仓：{} '
+        self.write_log(u'{},交易更新 =>{},\n 当前持仓：{} '
                        .format(self.cur_datetime,
                                trade.__dict__,
                                self.position.pos))
@@ -1173,6 +1173,8 @@ class CtaProFutureTemplate(CtaProTemplate):
         dist_record['volume'] = trade.volume
         dist_record['price'] = trade.price
         dist_record['symbol'] = trade.vt_symbol
+
+        # 处理股指锁单
         if trade.exchange == Exchange.CFFEX:
             if trade.direction == Direction.LONG:
                 if abs(self.position.short_pos) >= trade.volume:
@@ -1228,7 +1230,7 @@ class CtaProFutureTemplate(CtaProTemplate):
     def on_order(self, order: OrderData):
         """报单更新"""
         # 未执行的订单中，存在是异常，删除
-        self.write_log(u'{}报单更新，{}'.format(self.cur_datetime, order.__dict__))
+        self.write_log(u'{}报单更新 => {}'.format(self.cur_datetime, order.__dict__))
 
         # 修正order被拆单得情况"
         self.fix_order(order)
@@ -1274,7 +1276,7 @@ class CtaProFutureTemplate(CtaProTemplate):
         :param order:
         :return:
         """
-        self.write_log(u'委托单全部完成:{}'.format(order.__dict__))
+        self.write_log(u'报单更新 => 委托单全部完成:{}'.format(order.__dict__))
         active_order = self.active_orders[order.vt_orderid]
 
         # 通过vt_orderid，找到对应的网格
@@ -1330,7 +1332,7 @@ class CtaProFutureTemplate(CtaProTemplate):
         :param order:
         :return:
         """
-        self.write_log(u'委托开仓单撤销:{}'.format(order.__dict__))
+        self.write_log(u'报单更新 => 委托开仓 => 撤销:{}'.format(order.__dict__))
 
         if not self.trading:
             if not self.backtesting:
@@ -1343,7 +1345,7 @@ class CtaProFutureTemplate(CtaProTemplate):
 
         # 直接更新“未完成委托单”，更新volume,retry次数
         old_order = self.active_orders[order.vt_orderid]
-        self.write_log(u'{} 委托信息:{}'.format(order.vt_orderid, old_order))
+        self.write_log(u'报单更新 => {} 未完成订单信息:{}'.format(order.vt_orderid, old_order))
         old_order['traded'] = order.traded
         order_vt_symbol = copy(old_order['vt_symbol'])
         order_volume = old_order['volume'] - old_order['traded']
@@ -1477,7 +1479,7 @@ class CtaProFutureTemplate(CtaProTemplate):
         else:
             pre_status = old_order.get('status', Status.NOTTRADED)
             old_order.update({'status': Status.CANCELLED})
-            self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
+            self.write_log(u'委托单方式{},状态:{}=>{}'.format(order_type, pre_status, old_order.get('status')))
             if grid:
                 if order.vt_orderid in grid.order_ids:
                     grid.order_ids.remove(order.vt_orderid)
@@ -1492,7 +1494,7 @@ class CtaProFutureTemplate(CtaProTemplate):
 
     def on_order_close_canceled(self, order: OrderData):
         """委托平仓单撤销"""
-        self.write_log(u'委托平仓单撤销:{}'.format(order.__dict__))
+        self.write_log(u'报单更新 => 委托平仓 => 撤销:{}'.format(order.__dict__))
 
         if order.vt_orderid not in self.active_orders:
             self.write_error(u'{}不在未完成的委托单中:{}。'.format(order.vt_orderid, self.active_orders))
@@ -1504,7 +1506,7 @@ class CtaProFutureTemplate(CtaProTemplate):
 
         # 直接更新“未完成委托单”，更新volume,Retry次数
         old_order = self.active_orders[order.vt_orderid]
-        self.write_log(u'{} 订单信息:{}'.format(order.vt_orderid, old_order))
+        self.write_log(u'报单更新 => {} 未完成订单信息:{}'.format(order.vt_orderid, old_order))
         old_order['traded'] = order.traded
         # order_time = old_order['order_time']
         order_vt_symbol = copy(old_order['vt_symbol'])
@@ -1692,13 +1694,13 @@ class CtaProFutureTemplate(CtaProTemplate):
             if order_status in [Status.NOTTRADED, Status.SUBMITTING] and (
                     order_type == OrderType.LIMIT or '.SPD' in order_vt_symbol):
                 if over_seconds > self.cancel_seconds or force:  # 超过设置的时间还未成交
-                    self.write_log(u'超时{}秒未成交，取消委托单：vt_orderid:{},order:{}'
+                    self.write_log(u'撤单逻辑 => 超时{}秒未成交，取消委托单：vt_orderid:{},order:{}'
                                    .format(over_seconds, vt_orderid, order_info))
                     order_info.update({'status': Status.CANCELLING})
                     self.active_orders.update({vt_orderid: order_info})
                     ret = self.cancel_order(str(vt_orderid))
                     if not ret:
-                        self.write_log(u'撤单失败,更新状态为撤单成功')
+                        self.write_log(u'撤单逻辑 => 撤单失败,更新状态为撤单成功')
                         order_info.update({'status': Status.CANCELLED})
                         self.active_orders.update({vt_orderid: order_info})
                         if order_grid:
@@ -1710,13 +1712,13 @@ class CtaProFutureTemplate(CtaProTemplate):
 
             # 处理状态为‘撤销’的委托单
             elif order_status == Status.CANCELLED:
-                self.write_log(u'委托单{}已成功撤单，删除{}'.format(vt_orderid, order_info))
+                self.write_log(u'撤单逻辑 => 委托单{}已成功撤单，将删除未完成订单{}'.format(vt_orderid, order_info))
                 canceled_ids.append(vt_orderid)
 
                 if reopen:
                     # 撤销的委托单，属于开仓类，需要重新委托
                     if order_info['offset'] == Offset.OPEN:
-                        self.write_log(u'超时撤单后，重新开仓')
+                        self.write_log(u'撤单逻辑 => 重新开仓')
                         # 开空委托单
                         if order_info['direction'] == Direction.SHORT:
                             short_price = self.cur_mi_price - self.price_tick
@@ -1788,17 +1790,29 @@ class CtaProFutureTemplate(CtaProTemplate):
                             else:
                                 self.write_error(u'撤单后，重新委托平空仓失败')
                 else:
+                    self.write_log(u'撤单逻辑 => 无须重新开仓')
                     if order_info['offset'] == Offset.OPEN \
                             and order_grid \
-                            and len(order_grid.order_ids) == 0 \
-                            and order_grid.traded_volume == 0:
-                        self.write_log(u'移除委托网格{}'.format(order_grid.__dict__))
-                        order_info['grid'] = None
-                        self.gt.remove_grids_by_ids(direction=order_grid.direction, ids=[order_grid.id])
+                            and len(order_grid.order_ids) == 0:
+
+                        if order_info['traded'] == 0 and order_grid.traded_volume == 0:
+                            self.write_log(u'撤单逻辑 => 无任何成交 => 移除委托网格{}'.format(order_grid.__dict__))
+                            order_info['grid'] = None
+                            self.gt.remove_grids_by_ids(direction=order_grid.direction, ids=[order_grid.id])
+                        elif order_info['traded'] > 0:
+                            self.write_log('撤单逻辑 = > 部分开仓')
+                            if order_grid.traded_volume < order_info['traded']:
+                                self.write_log('撤单逻辑 = > 调整网格开仓数 {} => {}'.format(order_grid.traded_volume, order_grid['traded'] ))
+                                order_grid.traded_volume = order_info['traded']
+                            self.write_log(f'撤单逻辑 => 调整网格委托状态=> False, 开仓状态:True, 开仓数量:{order_grid.volume}=>{order_grid.traded_volume}')
+                            order_grid.order_status = False
+                            order_grid.open_status = True
+                            order_grid.volume = order_grid.traded_volume
+                            order_grid.traded_volume = 0
 
         # 删除撤单的订单
         for vt_orderid in canceled_ids:
-            self.write_log(u'删除orderID:{0}'.format(vt_orderid))
+            self.write_log(u'撤单逻辑 => 删除未完成订单:{}'.format(vt_orderid))
             self.active_orders.pop(vt_orderid, None)
 
         if len(self.active_orders) == 0:

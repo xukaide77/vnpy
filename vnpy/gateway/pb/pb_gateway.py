@@ -374,8 +374,8 @@ class PbGateway(BaseGateway):
                             product_id=product_id,
                             unit_id=unit_id,
                             holder_ids=holder_ids)
-        self.tq_api = TqMdApi(self)
-        self.tq_api.connect()
+        #self.tq_api = TqMdApi(self)
+        #self.tq_api.connect()
         self.init_query()
 
     def close(self) -> None:

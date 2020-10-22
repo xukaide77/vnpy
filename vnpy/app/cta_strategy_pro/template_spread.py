@@ -1163,19 +1163,19 @@ class CtaSpreadTemplate(CtaTemplate):
             return True
 
         # 检查流动性缺失
-        if not self.cur_act_tick.bid_price_1 <= self.cur_act_tick.last_price <= self.cur_act_tick.ask_price_1 \
-                and self.cur_act_tick.volume > 0:
-            self.write_log(u'流动性缺失导致leg1最新价{0} /V:{1}超出买1 {2}卖1 {3}范围,'
-                           .format(self.cur_act_tick.last_price, self.cur_act_tick.volume,
-                                   self.cur_act_tick.bid_price_1, self.cur_act_tick.ask_price_1))
-            return False
-
-        if not self.cur_pas_tick.bid_price_1 <= self.cur_pas_tick.last_price <= self.cur_pas_tick.ask_price_1 \
-                and self.cur_pas_tick.volume > 0:
-            self.write_log(u'流动性缺失导致leg2最新价{0} /V:{1}超出买1 {2}卖1 {3}范围,'
-                           .format(self.cur_pas_tick.last_price, self.cur_pas_tick.volume,
-                                   self.cur_pas_tick.bid_price_1, self.cur_pas_tick.ask_price_1))
-            return False
+        # if not self.cur_act_tick.bid_price_1 <= self.cur_act_tick.last_price <= self.cur_act_tick.ask_price_1 \
+        #         and self.cur_act_tick.volume > 0:
+        #     self.write_log(u'流动性缺失导致leg1最新价{0} /V:{1}超出买1 {2}卖1 {3}范围,'
+        #                    .format(self.cur_act_tick.last_price, self.cur_act_tick.volume,
+        #                            self.cur_act_tick.bid_price_1, self.cur_act_tick.ask_price_1))
+        #     return False
+        #
+        # if not self.cur_pas_tick.bid_price_1 <= self.cur_pas_tick.last_price <= self.cur_pas_tick.ask_price_1 \
+        #         and self.cur_pas_tick.volume > 0:
+        #     self.write_log(u'流动性缺失导致leg2最新价{0} /V:{1}超出买1 {2}卖1 {3}范围,'
+        #                    .format(self.cur_pas_tick.last_price, self.cur_pas_tick.volume,
+        #                            self.cur_pas_tick.bid_price_1, self.cur_pas_tick.ask_price_1))
+        #     return False
 
         # 如果设置了方向和volume，检查是否满足
         if direction==Direction.LONG:
