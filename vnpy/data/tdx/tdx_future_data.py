@@ -70,7 +70,7 @@ INIT_TDX_MARKET_MAP = {
     'CJL9': 28, 'CYL9': 28, 'FGL9': 28, 'JRL9': 28, 'LRL9': 28, 'MAL9': 28,
     'OIL9': 28, 'PML9': 28, 'RIL9': 28, 'RML9': 28, 'RSL9': 28, 'SFL9': 28,
     'SML9': 28, 'SRL9': 28, 'TAL9': 28, 'ICL9': 47, 'IFL9': 47, 'IHL9': 47,
-    'TFL9': 47, 'TL9': 47, 'TSL9': 47}
+    'TFL9': 47, 'TL9': 47, 'TSL9': 47, 'SAL9': 28, 'PGL9': 29, 'PFL9': 28,}
 # 常量
 QSIZE = 500
 ALL_MARKET_BEGIN_HOUR = 8
@@ -655,7 +655,9 @@ class TdxFutureData(object):
         q_size = QSIZE * 5
         # 每秒 2个， 10小时
         max_data_size = 1000000
-        market_id = INIT_TDX_MARKET_MAP.get(tdx_index_symbol, 0)
+        market_id = INIT_TDX_MARKET_MAP.get(tdx_index_symbol, None)
+        if market_id is None:
+            raise Exception(f'{tdx_index_symbol}未在INIT_TDX_MARKET_MAP中定义交易所')
         self.write_log(u'开始下载{}=>{}, market_id={} 当日分笔数据'.format(symbol, tdx_index_symbol, market_id))
 
         try:
