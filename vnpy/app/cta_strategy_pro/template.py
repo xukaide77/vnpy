@@ -771,8 +771,8 @@ class CtaProTemplate(CtaTemplate):
 
                     short_symbol = sg.snapshot.get('mi_symbol', self.vt_symbol)
                     pos_symbols.add(short_symbol)
-                    self.write_log(u'加载持仓空单[{},价格:{}],[指数:{},价格：{}],数量:{}手'
-                                   .format(short_symbol, sg.snapshot.get('open_price'),
+                    self.write_log(u'加载持仓空单[ID:{},vt_symbol:{},价格:{}],[指数:{},价格：{}],数量:{}手'
+                                   .format(sg.id, short_symbol, sg.snapshot.get('open_price'),
                                            self.idx_symbol, sg.open_price, sg.volume))
                     self.position.short_pos -= sg.volume
 
@@ -797,8 +797,8 @@ class CtaProTemplate(CtaTemplate):
                     long_symbol = lg.snapshot.get('mi_symbol', self.vt_symbol)
                     pos_symbols.add(long_symbol)
 
-                    self.write_log(u'加载持仓多单[{},价格:{}],[指数{},价格:{}],数量:{}手'
-                                   .format(lg.snapshot.get('miSymbol'), lg.snapshot.get('open_price'),
+                    self.write_log(u'加载持仓多单[ID:{},vt_symbol:{},价格:{}],[指数{},价格:{}],数量:{}手'
+                                   .format(lg.id, long_symbol, lg.snapshot.get('open_price'),
                                            self.idx_symbol, lg.open_price, lg.volume))
                     self.position.long_pos += lg.volume
 
@@ -899,24 +899,29 @@ class CtaProTemplate(CtaTemplate):
 
         none_mi_grid = None
         none_mi_symbol = None
-
+        self.write_log(f'持仓换月=>启动.')
         # 找出非主力合约的持仓网格
         for g in self.gt.get_opened_grids(direction=Direction.LONG):
-            none_mi_symbol = g.snapshot.get('mi_symbol')
+            none_mi_symbol = g.snapshot.get('mi_symbol', g.vt_symbol)
+            # 如果持仓的合约，跟策略配置的vt_symbol一致，则不处理
             if none_mi_symbol is None or none_mi_symbol == self.vt_symbol:
-                # 如果持仓的合约，跟策略配置的vt_symbol一致，则不处理
+                self.write_log(f'none_mi_symbol:{none_mi_symbol}, vt_symbol:{self.vt_symbol} 一致，不处理')
                 continue
+
+            # 如果未开仓，或者处于委托状态，或者已交易完毕，不处理
             if not g.open_status or g.order_status or g.volume - g.traded_volume <= 0:
+                self.write_log(f'开仓状态:{g.open_status}, 委托状态:{g.order_status},网格持仓:{g.volume} ,已交易数量:{g.traded_volume}, 不处理')
                 continue
 
             none_mi_grid = g
             if g.traded_volume > 0 and g.volume - g.traded_volume > 0:
+
                 g.volume -= g.traded_volume
                 g.traded_volume = 0
             break
         if none_mi_grid is None:
             return
-
+        self.write_log(f'持仓换月=>找到多单持仓:{none_mi_symbol},持仓数量:{none_mi_grid.volume}')
         # 找到行情中非主力合约/主力合约的最新价
         none_mi_tick = self.tick_dict.get(none_mi_symbol)
         mi_tick = self.tick_dict.get(self.vt_symbol, None)
@@ -925,24 +930,28 @@ class CtaProTemplate(CtaTemplate):
 
         # 如果涨停价，不做卖出
         if self.is_upper_limit(none_mi_symbol) or self.is_upper_limit(self.vt_symbol):
+            self.write_log(f'{none_mi_symbol} 或 {self.vt_symbol} 为涨停价，不做换仓')
             return
         none_mi_price = max(none_mi_tick.last_price, none_mi_tick.bid_price_1)
 
         grid = deepcopy(none_mi_grid)
         grid.id = str(uuid.uuid1())
+        grid.open_status = False
+        self.write_log(f'持仓换月=>复制持仓信息{none_mi_symbol},ID:{none_mi_grid.id} => {self.vt_symbol},ID:{grid.id}')
 
         # 委托卖出非主力合约
+
         vt_orderids = self.sell(price=none_mi_price,
                                 volume=none_mi_grid.volume,
                                 vt_symbol=none_mi_symbol,
                                 order_type=self.order_type,
                                 grid=none_mi_grid)
         if len(vt_orderids) > 0:
-            self.write_log(f'切换合约,委托卖出非主力合约{none_mi_symbol}持仓:{none_mi_grid.volume}')
+            self.write_log(f'持仓换月=>委托卖出非主力合约{none_mi_symbol}持仓:{none_mi_grid.volume}')
 
             # 已经发生过换月的，不执行买入新合约
             if none_mi_grid.snapshot.get("switched", False):
-                self.write_log(f'已经执行过换月，不再创建新的买入操作')
+                self.write_log(f'持仓换月=>已经执行过换月，不再创建新的买入操作')
                 return
 
             none_mi_grid.snapshot.update({'switched': True})
@@ -956,13 +965,13 @@ class CtaProTemplate(CtaTemplate):
                                    order_type=self.order_type,
                                    grid=grid)
             if len(vt_orderids) > 0:
-                self.write_log(u'切换合约,委托买入主力合约:{},价格:{},数量:{}'
+                self.write_log(u'持仓换月=>委托买入主力合约:{},价格:{},数量:{}'
                                .format(self.vt_symbol, self.cur_mi_price, grid.volume))
             else:
-                self.write_error(f'委托买入主力合约:{self.vt_symbol}失败')
+                self.write_error(f'持仓换月=>委托买入主力合约:{self.vt_symbol}失败')
             self.gt.save()
         else:
-            self.write_error(f'委托卖出非主力合约:{none_mi_symbol}失败')
+            self.write_error(f'持仓换月=>委托卖出非主力合约:{none_mi_symbol}失败')
 
     def tns_switch_short_pos(self):
         """切换合约，从持仓的非主力合约，切换至主力合约"""

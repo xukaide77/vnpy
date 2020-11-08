@@ -452,14 +452,13 @@ class OmsEngine(BaseEngine):
         import bz2
         import pickle
         contract_file_name = 'vn_contract.pkb2'
-        if not os.path.exists(contract_file_name):
-            return
-        try:
-            with bz2.BZ2File(contract_file_name, 'rb') as f:
-                self.contracts = pickle.load(f)
-                self.write_log(f'加载缓存合约字典:{contract_file_name}')
-        except Exception as ex:
-            self.write_log(f'加载缓存合约异常:{str(ex)}')
+        if os.path.exists(contract_file_name):
+            try:
+                with bz2.BZ2File(contract_file_name, 'rb') as f:
+                    self.contracts = pickle.load(f)
+                    self.write_log(f'加载缓存合约字典:{contract_file_name}')
+            except Exception as ex:
+                self.write_log(f'加载缓存合约异常:{str(ex)}')
 
         # 更新自定义合约
         custom_contracts = self.get_all_custom_contracts()

@@ -1070,6 +1070,8 @@ class CtpTdApi(TdApi):
                                 future_contract.update({'margin_rate': mi_margin_rate})
                                 future_contract.update({'symbol_size': idx_contract.size})
                                 future_contract.update({'price_tick': idx_contract.pricetick})
+                                if 'exchange' not in future_contract:
+                                    future_contract.update({'exchange': contract.exchange.value})
                                 future_contracts.update({underlying_symbol: future_contract})
                                 self.future_contract_changed = True
                                 index_contracts.update({underlying_symbol: idx_contract})
@@ -2090,4 +2092,3 @@ class TqMdApi():
                     self.update_thread.join()
         except Exception as e:
             self.gateway.write_log('退出天勤行情api异常:{}'.format(str(e)))
-

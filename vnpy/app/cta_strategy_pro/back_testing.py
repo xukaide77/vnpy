@@ -65,6 +65,7 @@ from vnpy.trader.util_logger import setup_logger
 from vnpy.data.mongo.mongo_data import MongoData
 from uuid import uuid1
 
+
 class BackTestingEngine(object):
     """
     CTA回测引擎
@@ -208,7 +209,7 @@ class BackTestingEngine(object):
         # 回测任务/回测结果，保存在数据库中
         self.mongo_api = None
         self.task_id = None
-        self.test_setting = None    # 回测设置
+        self.test_setting = None  # 回测设置
         self.strategy_setting = None  # 所有回测策略得设置
 
     def create_fund_kline(self, name, use_renko=False):
@@ -301,6 +302,77 @@ class BackTestingEngine(object):
     @lru_cache()
     def get_margin_rate(self, vt_symbol: str):
         return self.margin_rate.get(vt_symbol, 0.1)
+
+    def get_margin(self, vt_symbol: str):
+        """
+        按照当前价格，计算1手合约需要得保证金
+        :param vt_symbol:
+        :return: 普通合约/期权 => 当前价格 * size * margin_rate
+                 SP j2101&j2105.DCE => max( 当前价格 * size * margin_rate)
+                 j2101-1-i2101-3-BJ.SPD => (主动腿价格*主动腿size * 主动腿margin_rate + 被动腿价格*被动腿size * 被动腿margin_rate
+                 rb2101-1-rb2105-1-CJ.SPD => max(主动腿价格*主动腿size * 主动腿margin_rate , 被动腿价格*被动腿size * 被动腿margin_rate
+        """
+
+        if '.SPD99' in vt_symbol:
+            vt_symbol = vt_symbol.replace('.SPD99', '.SPD')
+
+        if not vt_symbol.endswith('.SPD') and '&' not in vt_symbol:
+            cur_price = self.get_price(vt_symbol)
+            cur_size = self.get_size(vt_symbol)
+            cur_margin_rate = self.get_margin_rate(vt_symbol)
+            if cur_price and cur_size and cur_margin_rate:
+                return abs(cur_price * cur_size * cur_margin_rate)
+            else:
+                # 取不到价格，取不到size，或者取不到保证金比例
+                self.write_error(f'无法计算{vt_symbol}的保证金，价格:{cur_price}或size:{cur_size}或margin_rate:{cur_margin_rate}')
+                return None
+
+        # j2101-1-i2101-3-BJ.SPD  rb2101-1-rb2105-1-CJ.SPD
+        if vt_symbol.endswith('.SPD'):
+            act_symbol, act_ratio, pas_symbol, pas_ratio, spd_type = vt_symbol.replace('.SPD', '').split('-')
+            act_vt_symbol = '{}.{}'.format(act_symbol, self.get_exchange(act_symbol).value)
+            pas_vt_symbol = '{}.{}'.format(pas_symbol, self.get_exchange(pas_symbol).value)
+            act_ratio = int(act_ratio)
+            pas_ratio = int(pas_ratio)
+        # SP j2101&j2105.DCE
+        elif '&' in vt_symbol:
+            symbol, exchange = extract_vt_symbol(vt_symbol)
+            symbol = symbol.split(' ')[-1]
+            act_symbol, pas_symbol = symbol.split('&')
+            act_vt_symbol = f'{act_symbol}.{exchange.value}'
+            pas_vt_symbol = f'{pas_symbol}.{exchange.value}'
+            act_ratio = 1
+            pas_ratio = 1
+        else:
+            self.write_error(f'无法计算{vt_symbol}的保证金：无法分解')
+            return None
+
+        act_cur_price = self.get_price(act_vt_symbol)
+        act_size = self.get_size(act_vt_symbol)
+        act_margin_rate = self.get_margin_rate(act_vt_symbol)
+        pas_cur_price = self.get_price(pas_vt_symbol)
+        pas_size = self.get_size(pas_vt_symbol)
+        pas_margin_rate = self.get_margin_rate(pas_vt_symbol)
+
+        if not all([act_cur_price, act_size, act_margin_rate]):
+            self.write_error(
+                f'无法计算{vt_symbol}的保证金，{act_vt_symbol}价格:{act_cur_price}或size:{act_size}或margin_rate:{act_margin_rate}')
+            return None
+        if not all([pas_cur_price, pas_size, pas_margin_rate]):
+            self.write_error(
+                f'无法计算{vt_symbol}的保证金，{pas_vt_symbol}价格:{pas_cur_price}或size:{pas_size}或margin_rate:{pas_margin_rate}')
+            return None
+
+        # 跨期合约
+        if get_underlying_symbol(act_symbol) == get_underlying_symbol(pas_symbol):
+            spd_margin = max(act_cur_price * act_size * act_margin_rate * act_ratio,
+                             pas_cur_price * pas_size * pas_margin_rate * pas_ratio)
+
+        # 跨品种合约，取最大值
+        else:
+            spd_margin = act_cur_price * act_size * act_margin_rate * act_ratio + pas_cur_price * pas_size * pas_margin_rate * pas_ratio
+
+        return spd_margin
 
     def set_slippage(self, vt_symbol: str, slippage: float):
         """设置滑点点数"""
@@ -599,7 +671,8 @@ class BackTestingEngine(object):
     def new_bar(self, bar):
         """新的K线"""
         self.last_bar.update({bar.vt_symbol: bar})
-        if self.last_dt is None or (bar.datetime and bar.datetime > self.last_dt - timedelta(seconds=self.bar_interval_seconds)):
+        if self.last_dt is None or (
+                bar.datetime and bar.datetime > self.last_dt - timedelta(seconds=self.bar_interval_seconds)):
             self.last_dt = bar.datetime + timedelta(seconds=self.bar_interval_seconds)
         self.set_price(bar.vt_symbol, bar.close_price)
         self.cross_stop_order(bar=bar)  # 撮合停止单
@@ -717,7 +790,7 @@ class BackTestingEngine(object):
         elif self.contract_type == 'future':
             symbol = vt_symbol
             if self.using_99_contract:
-                underly_symbol = get_underlying_symbol(symbol).upper()         # WJ: 当需要回测A1701.DCE时，不能替换成99合约。
+                underly_symbol = get_underlying_symbol(symbol).upper()  # WJ: 当需要回测A1701.DCE时，不能替换成99合约。
                 exchange = self.get_exchange(f'{underly_symbol}99')
             else:
                 exchange = self.get_exchange(symbol)
@@ -798,7 +871,7 @@ class BackTestingEngine(object):
         """保存策略数据"""
         for strategy in self.strategies.values():
             self.write_log(u'save strategy data')
-            if hasattr(strategy,'save_data'):
+            if hasattr(strategy, 'save_data'):
                 strategy.save_data()
 
     def send_order(self,
@@ -1441,7 +1514,8 @@ class BackTestingEngine(object):
                         # raise Exception(u'异常!没有空单持仓，不能cover')
                         return
 
-                    cur_short_pos_list = [s_pos.volume for s_pos in self.short_position_list if s_pos.vt_symbol == trade.vt_symbol]
+                    cur_short_pos_list = [s_pos.volume for s_pos in self.short_position_list if
+                                          s_pos.vt_symbol == trade.vt_symbol]
 
                     self.write_log(u'{}当前空单:{}'.format(trade.vt_symbol, cur_short_pos_list))
 
@@ -1454,7 +1528,8 @@ class BackTestingEngine(object):
                             self.write_error(f'没有{trade.strategy_name}对应的symbol:{trade.vt_symbol}的空单持仓, 继续')
                             break
                         else:
-                            self.write_error(u'异常，{}没有对应symbol:{}的空单持仓, 终止'.format(trade.strategy_name, trade.vt_symbol))
+                            self.write_error(
+                                u'异常，{}没有对应symbol:{}的空单持仓, 终止'.format(trade.strategy_name, trade.vt_symbol))
                             # raise Exception(u'realtimeCalculate2() Exception,没有对应symbol:{0}的空单持仓'.format(trade.vt_symbol))
                             return
 
@@ -1587,7 +1662,6 @@ class BackTestingEngine(object):
 
                         cover_volume = 0
 
-
                         if g_result is not None:
                             # 更新组合的数据
                             g_result.turnover = g_result.turnover + result.turnover
@@ -1629,7 +1703,8 @@ class BackTestingEngine(object):
                             # raise RuntimeError(f'realtimeCalculate2() Exception,没有对应的symbol:{trade.vt_symbol}多单数据,')
                             return
 
-                    cur_long_pos_list = [s_pos.volume for s_pos in self.long_position_list if s_pos.vt_symbol == trade.vt_symbol]
+                    cur_long_pos_list = [s_pos.volume for s_pos in self.long_position_list if
+                                         s_pos.vt_symbol == trade.vt_symbol]
 
                     self.write_log(u'{}当前多单:{}'.format(trade.vt_symbol, cur_long_pos_list))
 
@@ -2206,12 +2281,12 @@ class BackTestingEngine(object):
             self.mongo_api = MongoData(host=save_mongo.get('host', 'localhost'), port=save_mongo.get('port', 27017))
 
         d = {
-            'task_id': self.task_id,    # 单实例回测任务id
-            'name': self.test_name,     # 回测实例名称， 策略名+参数+时间
+            'task_id': self.task_id,  # 单实例回测任务id
+            'name': self.test_name,  # 回测实例名称， 策略名+参数+时间
             'group_id': self.test_setting.get('group_id', datetime.now().strftime('%y-%m-%d')),  # 回测组合id
             'status': 'start',
-            'task_start_time': datetime.now(),   # 任务开始执行时间
-            'run_host': socket.gethostname(),    # 任务运行得host主机
+            'task_start_time': datetime.now(),  # 任务开始执行时间
+            'run_host': socket.gethostname(),  # 任务运行得host主机
             'test_setting': self.test_setting,  # 回测参数
             'strategy_setting': self.strategy_setting,  # 策略参数
         }
@@ -2274,11 +2349,11 @@ class BackTestingEngine(object):
             flt=flt)
 
         if d:
-            d.update({'status': 'finish'})                                   # 更新状态未完成
-            d.update(result_info)                                            # 补充回测结果
-            d.update({'task_finish_time': datetime.now()})                    # 更新回测完成时间
-            d.update({'trade_list': binary.Binary(zlib.compress(pickle.dumps(self.trade_pnl_list)))})      # 更新交易记录
-            d.update({'daily_list': binary.Binary(zlib.compress(pickle.dumps(self.daily_list)))})        # 更新每日净值记录
+            d.update({'status': 'finish'})  # 更新状态未完成
+            d.update(result_info)  # 补充回测结果
+            d.update({'task_finish_time': datetime.now()})  # 更新回测完成时间
+            d.update({'trade_list': binary.Binary(zlib.compress(pickle.dumps(self.trade_pnl_list)))})  # 更新交易记录
+            d.update({'daily_list': binary.Binary(zlib.compress(pickle.dumps(self.daily_list)))})  # 更新每日净值记录
 
             self.write_log(u'更新回测结果至数据库')
 

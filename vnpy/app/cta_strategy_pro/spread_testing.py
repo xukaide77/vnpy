@@ -288,6 +288,9 @@ class SpreadTestingEngine(BackTestingEngine):
 
         self.write_log(u'开始套利组合回测')
 
+        # 保存回测脚本到数据库
+        self.save_setting_to_mongo()
+
         for strategy_name, strategy_setting in strategy_settings.items():
             # 策略得启动日期
             if 'start_date' in strategy_setting:

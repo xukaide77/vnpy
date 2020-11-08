@@ -850,6 +850,78 @@ class CtaEngine(BaseEngine):
 
         return contract.min_volume
 
+    def get_margin(self, vt_symbol: str):
+        """
+        按照当前价格，计算1手合约需要得保证金
+        :param vt_symbol:
+        :return: 普通合约/期权 => 当前价格 * size * margin_rate
+                 SP j2101&j2105.DCE => max( 当前价格 * size * margin_rate)
+                 j2101-1-i2101-3-BJ.SPD => (主动腿价格*主动腿size * 主动腿margin_rate + 被动腿价格*被动腿size * 被动腿margin_rate
+                 rb2101-1-rb2105-1-CJ.SPD => max(主动腿价格*主动腿size * 主动腿margin_rate , 被动腿价格*被动腿size * 被动腿margin_rate
+        """
+        if not vt_symbol.endswith('.SPD') and '&' not in vt_symbol:
+            cur_price = self.get_price(vt_symbol)
+            cur_size = self.get_size(vt_symbol)
+            cur_margin_rate = self.get_margin_rate(vt_symbol)
+            if cur_price and cur_size and cur_margin_rate:
+                return abs(cur_price * cur_size * cur_margin_rate)
+            else:
+                # 取不到价格，取不到size，或者取不到保证金比例
+                self.write_error(f'无法计算{vt_symbol}的保证金，价格:{cur_price}或size:{cur_size}或margin_rate:{cur_margin_rate}')
+                return None
+
+        # j2101-1-i2101-3-BJ.SPD  rb2101-1-rb2105-1-CJ.SPD
+        if vt_symbol.endswith('.SPD'):
+            contract_conf = self.get_custom_contract(vt_symbol)
+            if contract_conf is None:
+                self.write_error(f'无法计算{vt_symbol}保证金，获取不到自定义合约配置')
+                return None
+            act_symbol = contract_conf.get('leg1_symbol')
+            pas_symbol = contract_conf.get('leg2_symbol')
+            act_vt_symbol = '{}.{}'.format(act_symbol, contract_conf.get('leg1_exchange'))
+            pas_vt_symbol = '{}.{}'.format(pas_symbol, contract_conf.get('leg2_exchange'))
+            act_ratio = int(contract_conf.get('leg1_ratio'))
+            pas_ratio = int(contract_conf.get('leg2_ratio'))
+        # SP j2101&j2105.DCE
+        elif '&' in vt_symbol:
+            symbol, exchange = extract_vt_symbol(vt_symbol)
+            symbol = symbol.split(' ')[-1]
+            act_symbol, pas_symbol = symbol.split('&')
+            act_vt_symbol = f'{act_symbol}.{exchange.value}'
+            pas_vt_symbol = f'{pas_symbol}.{exchange.value}'
+            act_ratio = 1
+            pas_ratio = 1
+        else:
+            self.write_error(f'无法计算{vt_symbol}的保证金：无法分解')
+            return None
+
+        act_cur_price = self.get_price(act_vt_symbol)
+        act_size = self.get_size(act_vt_symbol)
+        act_margin_rate = self.get_margin_rate(act_vt_symbol)
+        pas_cur_price = self.get_price(pas_vt_symbol)
+        pas_size = self.get_size(pas_vt_symbol)
+        pas_margin_rate = self.get_margin_rate(pas_vt_symbol)
+
+        if not all([act_cur_price, act_size, act_margin_rate]):
+            self.write_error(
+                f'无法计算{vt_symbol}的保证金，{act_vt_symbol}价格:{act_cur_price}或size:{act_size}或margin_rate:{act_margin_rate}')
+            return None
+        if not all([pas_cur_price, pas_size, pas_margin_rate]):
+            self.write_error(
+                f'无法计算{vt_symbol}的保证金，{pas_vt_symbol}价格:{pas_cur_price}或size:{pas_size}或margin_rate:{pas_margin_rate}')
+            return None
+
+        # 跨期合约
+        if get_underlying_symbol(act_symbol) == get_underlying_symbol(pas_symbol):
+            spd_margin = max(act_cur_price * act_size * act_margin_rate * act_ratio,
+                             pas_cur_price * pas_size * pas_margin_rate * pas_ratio)
+
+        # 跨品种合约，取最大值
+        else:
+            spd_margin = act_cur_price * act_size * act_margin_rate * act_ratio + pas_cur_price * pas_size * pas_margin_rate * pas_ratio
+
+        return spd_margin
+
     def get_tick(self, vt_symbol: str):
         """获取合约得最新tick"""
         return self.main_engine.get_tick(vt_symbol)
@@ -873,6 +945,24 @@ class CtaEngine(BaseEngine):
         return self.main_engine.get_contract(vt_symbol)
 
     def get_custom_contract(self, vt_symbol):
+        """
+                获取自定义合约的设置
+                :param symbol:    "pb2012-1-pb2101-1-CJ"
+                :return: {
+                "name": "pb跨期价差",
+                "exchange": "SPD",
+                "leg1_symbol": "pb2012",
+                "leg1_exchange": "SHFE",
+                "leg1_ratio": 1,
+                "leg2_symbol": "pb2101",
+                "leg2_exchange": "SHFE",
+                "leg2_ratio": 1,
+                "is_spread": true,
+                "size": 1,
+                "margin_rate": 0.1,
+                "price_tick": 5
+                }
+                """
         return self.main_engine.get_custom_contract(vt_symbol.split('.')[0])
 
     def get_all_contracts(self):
