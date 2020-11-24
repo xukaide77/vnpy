@@ -653,7 +653,7 @@ class CtpMdApi(MdApi):
         # 不处理开盘前的tick数据
         if dt.hour in [8, 20] and dt.minute < 59:
             return
-        if exchange is Exchange.CFFEX and dt.hour == 9 and dt.minute < 14:
+        if exchange is Exchange.CFFEX and dt.hour == 9 and dt.minute < 29:
             return
 
         tick = TickData(
@@ -1181,6 +1181,28 @@ class CtpTdApi(TdApi):
             trade_date = trade_date[0:4] + '-' + trade_date[4:6] + '-' + trade_date[6:8]
         trade_time = data['TradeTime']
         trade_datetime = datetime.strptime(f'{trade_date} {trade_time}', '%Y-%m-%d %H:%M:%S')
+        #print(f'raw_data:{print_dict(data)}')
+        # 修正 郑商所、大商所的TradeDate错误
+        if exchange in [Exchange.DCE, Exchange.CZCE]:
+            dt_now = datetime.now()
+            # 交易发生在夜盘
+            if trade_datetime.hour >= 21:
+                # 系统时间在夜盘，使用系统时间
+                if dt_now.hour >= 21:
+                    trade_date = dt_now.strftime('%Y-%m-%d')
+                    trade_datetime = datetime.strptime(f'{trade_date} {trade_time}', '%Y-%m-%d %H:%M:%S')
+
+                # 系统时间在日盘
+                else:
+                    # 星期一 =》 星期五
+                    if dt_now.isoweekday() == 1:
+                        trade_datetime -= timedelta(days=3)
+                        #print(f'trade time =>{trade_datetime}')
+                    # 星期二~星期五 =》上一天
+                    else:
+                        trade_datetime -= timedelta(days=1)
+                        #print(f'trade time =>{trade_datetime}')
+
         tradeid = data["TradeID"]
         trade = TradeData(
             accountid=self.accountid,

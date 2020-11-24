@@ -1108,6 +1108,25 @@ class RohonTdApi(TdApi):
             trade_date = trade_date[0:4] + '-' + trade_date[4:6] + '-' + trade_date[6:8]
         trade_time = data['TradeTime']
         trade_datetime = datetime.strptime(f'{trade_date} {trade_time}', '%Y-%m-%d %H:%M:%S')
+        # 修正 郑商所、大商所的TradeDate错误
+        if exchange in [Exchange.DCE, Exchange.CZCE]:
+            dt_now = datetime.now()
+            # 交易发生在夜盘
+            if trade_datetime.hour >= 21:
+                # 系统时间在夜盘，使用系统时间
+                if dt_now.hour >= 21:
+                    trade_date = dt_now.strftime('%Y-%m-%d')
+                    trade_datetime = datetime.strptime(f'{trade_date} {trade_time}', '%Y-%m-%d %H:%M:%S')
+
+                # 系统时间在日盘
+                else:
+                    # 星期一 =》 星期五
+                    if dt_now.isoweekday() == 1:
+                        trade_datetime -= timedelta(days=3)
+                    # 星期二~星期五 =》上一天
+                    else:
+                        trade_datetime -= timedelta(days=1)
+
         tradeid = data["TradeID"]
         trade = TradeData(
             accountid=self.accountid,
