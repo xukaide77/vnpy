@@ -899,6 +899,7 @@ class CtaProTemplate(CtaTemplate):
 
         none_mi_grid = None
         none_mi_symbol = None
+
         self.write_log(f'持仓换月=>启动.')
         # 找出非主力合约的持仓网格
         for g in self.gt.get_opened_grids(direction=Direction.LONG):
@@ -1648,11 +1649,20 @@ class CtaProFutureTemplate(CtaProTemplate):
 
             self.gt.save()
 
+        # 普通限价单委托方式
         else:
             pre_status = old_order.get('status', Status.NOTTRADED)
             old_order.update({'status': Status.CANCELLED})
+
             self.write_log(u'委托单状态:{}=>{}'.format(pre_status, old_order.get('status')))
             if grid:
+                # 判断是否有部分交易
+                if order.traded > 0:
+                    old_traded_volume = grid.traded_volume
+                    grid.traded_volume += order.traded
+                    self.write_log(f'{grid.direction.value}单部分{order.offset}仓，'
+                                   + f'网格volume:{grid.volume}, traded_volume:{old_traded_volume}=>{grid.traded_volume}')
+
                 if order.vt_orderid in grid.order_ids:
                     grid.order_ids.remove(order.vt_orderid)
                 if len(grid.order_ids) == 0:
@@ -1709,14 +1719,16 @@ class CtaProFutureTemplate(CtaProTemplate):
                     self.active_orders.update({vt_orderid: order_info})
                     ret = self.cancel_order(str(vt_orderid))
                     if not ret:
-                        self.write_log(u'撤单逻辑 => 撤单失败,更新状态为撤单成功')
-                        order_info.update({'status': Status.CANCELLED})
-                        self.active_orders.update({vt_orderid: order_info})
-                        if order_grid:
-                            if vt_orderid in order_grid.order_ids:
-                                order_grid.order_ids.remove(vt_orderid)
-                            if len(order_grid.order_ids) == 0:
-                                order_grid.order_status = False
+                        self.write_error(f'{self.strategy_name}撤单逻辑 => {order_vt_symbol}撤单失败')
+
+                        #self.write_log(u'撤单逻辑 => 撤单失败,更新状态为撤单成功')
+                    #     order_info.update({'status': Status.CANCELLED})
+                    #     self.active_orders.update({vt_orderid: order_info})
+                    #     if order_grid:
+                    #         if vt_orderid in order_grid.order_ids:
+                    #             order_grid.order_ids.remove(vt_orderid)
+                    #         if len(order_grid.order_ids) == 0:
+                    #             order_grid.order_status = False
                 continue
 
             # 处理状态为‘撤销’的委托单

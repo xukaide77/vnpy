@@ -407,7 +407,10 @@ class BackTestingEngine(object):
 
     def get_commission_rate(self, vt_symbol: str):
         """ 获取保证金比例，缺省万分之一"""
-        return self.commission_rate.get(vt_symbol, float(0.00001))
+        if vt_symbol not in self.commission_rate:
+            symbol, exchange = extract_vt_symbol(vt_symbol)
+            return self.commission_rate.get(symbol, float(0.0001))
+        return self.commission_rate.get(vt_symbol, float(0.0001))
 
     def get_fix_commission(self, vt_symbol: str):
         return self.fix_commission.get(vt_symbol, 0)
@@ -623,11 +626,12 @@ class BackTestingEngine(object):
             self.set_margin_rate(symbol, margin_rate)
 
             self.set_commission_rate(symbol, symbol_data.get('commission_rate', float(0.0001)))
-
+            exchange = symbol_data.get('exchange', 'LOCAL')
+            self.set_commission_rate(f'{symbol}.{exchange}', symbol_data.get('commission_rate', float(0.0001)))
             self.set_contract(
                 symbol=symbol,
                 name=symbol,
-                exchange=Exchange(symbol_data.get('exchange', 'LOCAL')),
+                exchange=Exchange(exchange),
                 product=Product(symbol_data.get('product', "期货")),
                 size=symbol_data.get('symbol_size', 10),
                 price_tick=symbol_data.get('price_tick', 1),
@@ -1874,6 +1878,7 @@ class BackTestingEngine(object):
                 # 不计算套利合约的持仓占用保证金
                 if t.vt_symbol.endswith('SPD') or t.vt_symbol.endswith('SPD99'):
                     continue
+                cur_occupy_money = 0
                 # 当前空单保证金
                 if self.use_margin:
                     try:
