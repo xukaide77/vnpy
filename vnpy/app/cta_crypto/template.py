@@ -1338,7 +1338,7 @@ class CtaFutureTemplate(CtaTemplate):
                 continue
 
             if grid.open_status and not grid.order_status:
-                dn_grids_info += f'持多中: [数量:{grid.volume}\n, 开仓时间:{grid.open_time}]\n'
+                dn_grids_info += f'持多中: [数量:{grid.volume}, 开仓价:{grid.open_price},开仓时间:{grid.open_time}]\n'
                 continue
 
             if not grid.open_status and grid.order_status:

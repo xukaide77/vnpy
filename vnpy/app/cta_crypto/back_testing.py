@@ -325,6 +325,13 @@ class BackTestingEngine(object):
     def get_price(self, vt_symbol: str):
         return self.price_dict.get(vt_symbol, None)
 
+    def get_margin(self, vt_symbol:str):
+        """获取某合约的单位为1的保证金"""
+        cur_price = self.get_price(vt_symbol)
+        if cur_price is None:
+            return None
+        return cur_price * self.get_margin_rate(vt_symbol)
+
     def set_commission_rate(self, vt_symbol: str, rate: float):
         """设置佣金比例"""
         self.commission_rate.update({vt_symbol: rate})

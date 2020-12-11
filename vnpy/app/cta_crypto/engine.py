@@ -811,6 +811,22 @@ class CtaEngine(BaseEngine):
 
         return None
 
+    def get_margin(self, vt_symbol: str):
+        """
+        按照当前价格，计算1手合约需要得保证金
+        :param vt_symbol:
+        :return: 普通合约 => 当前价格  * margin_rate
+
+        """
+        cur_price = self.get_price(vt_symbol)
+        cur_margin_rate = self.get_margin_rate(vt_symbol)
+        if cur_price  and cur_margin_rate:
+            return abs(cur_price * cur_margin_rate)
+        else:
+            # 取不到价格，取不到size，或者取不到保证金比例
+            self.write_error(f'无法计算{vt_symbol}的保证金，价格:{cur_price}或margin_rate:{cur_margin_rate}')
+            return None
+
     def get_contract(self, vt_symbol):
         return self.main_engine.get_contract(vt_symbol)
 
