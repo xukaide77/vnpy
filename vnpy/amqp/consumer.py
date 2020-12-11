@@ -62,28 +62,36 @@ class worker(base_broker):
         self.channel.exchange_declare(exchange=exchange,
                                       exchange_type='direct',
                                       durable=True)
+        #print(f'remove queue if exist and none consume')
+        #self.channel.queue_delete(queue=queue, if_unused=True)
+        self.queue = self.channel.queue_declare(queue="", durable=False, auto_delete=True, exclusive=True).method.queue
+        if self.queue !=queue:
+            print(f'work queue:{queue}=>{self.queue}\n')
 
-        self.queue = self.channel.queue_declare(queue=queue, durable=True).method.queue
-        print('worker use exchange:{},queue:{}'.format(exchange, self.queue))
+        print('worker bind {}:{}/ex:{}/queue:{}/r_k:{}'.format(host, port, exchange, self.queue, routing_key))
         self.channel.queue_bind(queue=self.queue, exchange=exchange,
                                 routing_key=self.routing_key)          # 队列名采用服务端分配的临时队列
 
         # 每个worker只执行一个
         self.channel.basic_qos(prefetch_count=1)
+        # 消息接收《=》call_back绑定
+        self.channel.basic_consume(self.queue, self.callback, auto_ack=False)
 
     def callback(self, chan, method_frame, _header_frame, body, userdata=None):
         #print(1)
-        print(" [x] received task: %r" % body)
+        print(" [x] received task: %r\n" % body)
         chan.basic_ack(delivery_tag=method_frame.delivery_tag)
-        print(" [x] task finished ")
+        print(" [x] task finished \n")
 
     def subscribe(self):
-        print('worker subscribed')
-        # 消息接收
-        self.channel.basic_consume(self.queue, self.callback, auto_ack=False)
+        print(f'worker subscribed on queue:{self.queue}\n')
         self.channel.start_consuming()
 
     def start(self):
+        """
+        启动
+        :return:
+        """
         print('worker start')
         try:
             self.subscribe()

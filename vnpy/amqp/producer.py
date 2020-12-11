@@ -1,6 +1,6 @@
 # encoding: UTF-8
 # 消息生产者类（集合）
-
+import sys
 import json
 import pika
 import traceback
@@ -50,13 +50,15 @@ class sender(base_broker):
                                        properties=pika.BasicProperties(content_type=content_type,
                                                                        delivery_mode=1))
         except Exception as e:
-            print(e)
-            # 重连一次，继续发送
-            self.reconnect().channel.basic_publish(exchange=self.exchange,
-                                                   routing_key=self.routing_key,
-                                                   body=text,
-                                                   properties=pika.BasicProperties(content_type=content_type,
-                                                                                   delivery_mode=1))
+            print(e,file=sys.stderr)
+            if 'Channel is closed' in str(e):
+                self.reconnect()
+            # # 重连一次，继续发送
+            # self.reconnect().channel.basic_publish(exchange=self.exchange,
+            #                                        routing_key=self.routing_key,
+            #                                        body=text,
+            #                                        properties=pika.BasicProperties(content_type=content_type,
+            #                                                                        delivery_mode=1))
 
     def exit(self):
         self.connection.close()
@@ -77,7 +79,9 @@ class task_creator(base_broker):
 
         # 通过channel，创建/使用一个queue。
         queue = self.channel.queue_declare(self.queue_name, durable=True).method.queue
-        print(f'create/use queue:{queue}')
+        if queue == self.queue_name:
+            print(f'task queue {self.queue_name} => {queue}')
+        print(f'create/use queue:{host}:{port}/q_n:{queue}/r_k:{self.routing_key}\n')
         # 通过channel，创建/使用一个网关
         # exchange_type: direct
         # passive: 只是检查其是否存在
@@ -158,14 +162,16 @@ class publisher(base_broker):
                                        properties=pika.BasicProperties(content_type=content_type,
                                                                        delivery_mode=1))
         except Exception as e:
-            print(e)
+            print(f'pub exception:{str(e)}')
             # 重连一次，继续发送
-            self.reconnect().channel.basic_publish(exchange=self.exchange,
+            try:
+                self.reconnect().channel.basic_publish(exchange=self.exchange,
                                                    routing_key=routing_key,
                                                    body=text,
                                                    properties=pika.BasicProperties(content_type=content_type,
                                                                                    delivery_mode=1))
-
+            except Exception as ex:
+                print(f're pub ex:{ex}')
     def exit(self):
         self.connection.close()
 
