@@ -11,5 +11,5 @@ class IndexTickPublisherApp(BaseApp):
     app_name = APP_NAME
     app_module = __module__
     app_path = Path(__file__).parent
-    display_name = u'指数行情推送'
+    display_name = u'期货指数全行情推送'
     engine_class = IndexTickPublisher

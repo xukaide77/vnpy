@@ -53,7 +53,7 @@ from vnpy.trader.constant import (
     OptionType,
     Interval
 )
-from vnpy.trader.gateway import BaseGateway
+from vnpy.trader.gateway import BaseGateway,TickCombiner
 from vnpy.trader.object import (
     TickData,
     BarData,
@@ -866,9 +866,11 @@ class RohonTdApi(TdApi):
     def onRspQryInvestorPosition(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
         if not data:
+            print('onRspQryInvestorPosition:not data')
             return
 
         if data.get("InstrumentID") not in symbol_exchange_map:
+            print('onRspQryInvestorPosition: {} not in symbol_exchange_map'.format(data.get("InstrumentID")))
             return
 
         # Get buffered position object
@@ -1045,7 +1047,7 @@ class RohonTdApi(TdApi):
         Callback of order status update.
         """
         if self.gateway.debug:
-            print(f'onRtnOrder')
+            print(f'onRtnOrder{print_dict(data)}')
 
         symbol = data["InstrumentID"]
         exchange = symbol_exchange_map.get(symbol, "")
@@ -1093,7 +1095,7 @@ class RohonTdApi(TdApi):
         Callback of trade status update.
         """
         if self.gateway.debug:
-            print(f'onRtnTrade')
+            print(f'onRtnTrade:{print_dict(data)}')
 
         symbol = data["InstrumentID"]
         exchange = symbol_exchange_map.get(symbol, "")
@@ -2078,226 +2080,3 @@ class TqMdApi():
         except Exception as e:
             self.gateway.write_log('退出天勤行情api异常:{}'.format(str(e)))
 
-
-class TickCombiner(object):
-    """
-    Tick合成类
-    """
-
-    def __init__(self, gateway, setting):
-        self.gateway = gateway
-        self.gateway_name = self.gateway.gateway_name
-        self.gateway.write_log(u'创建tick合成类:{}'.format(setting))
-
-        self.symbol = setting.get('symbol', None)
-        self.leg1_symbol = setting.get('leg1_symbol', None)
-        self.leg2_symbol = setting.get('leg2_symbol', None)
-        self.leg1_ratio = setting.get('leg1_ratio', 1)  # 腿1的数量配比
-        self.leg2_ratio = setting.get('leg2_ratio', 1)  # 腿2的数量配比
-        self.price_tick = setting.get('price_tick', 1)  # 合成价差加比后的最小跳动
-        # 价差
-        self.is_spread = setting.get('is_spread', False)
-        # 价比
-        self.is_ratio = setting.get('is_ratio', False)
-
-        self.last_leg1_tick = None
-        self.last_leg2_tick = None
-
-        # 价差日内最高/最低价
-        self.spread_high = None
-        self.spread_low = None
-
-        # 价比日内最高/最低价
-        self.ratio_high = None
-        self.ratio_low = None
-
-        # 当前交易日
-        self.trading_day = None
-
-        if self.is_ratio and self.is_spread:
-            self.gateway.write_error(u'{}参数有误，不能同时做价差/加比.setting:{}'.format(self.symbol, setting))
-            return
-
-        self.gateway.write_log(u'初始化{}合成器成功'.format(self.symbol))
-        if self.is_spread:
-            self.gateway.write_log(
-                u'leg1:{} * {} - leg2:{} * {}'.format(self.leg1_symbol, self.leg1_ratio, self.leg2_symbol,
-                                                      self.leg2_ratio))
-        if self.is_ratio:
-            self.gateway.write_log(
-                u'leg1:{} * {} / leg2:{} * {}'.format(self.leg1_symbol, self.leg1_ratio, self.leg2_symbol,
-                                                      self.leg2_ratio))
-
-    def on_tick(self, tick):
-        """OnTick处理"""
-        combinable = False
-
-        if tick.symbol == self.leg1_symbol:
-            # leg1合约
-            self.last_leg1_tick = tick
-            if self.last_leg2_tick is not None:
-                if self.last_leg1_tick.datetime.replace(microsecond=0) == self.last_leg2_tick.datetime.replace(
-                        microsecond=0):
-                    combinable = True
-
-        elif tick.symbol == self.leg2_symbol:
-            # leg2合约
-            self.last_leg2_tick = tick
-            if self.last_leg1_tick is not None:
-                if self.last_leg2_tick.datetime.replace(microsecond=0) == self.last_leg1_tick.datetime.replace(
-                        microsecond=0):
-                    combinable = True
-
-        # 不能合并
-        if not combinable:
-            return
-
-        if not self.is_ratio and not self.is_spread:
-            return
-
-        # 以下情况，基本为单腿涨跌停，不合成价差/价格比 Tick
-        if (self.last_leg1_tick.ask_price_1 == 0 or self.last_leg1_tick.bid_price_1 == self.last_leg1_tick.limit_up) \
-                and self.last_leg1_tick.ask_volume_1 == 0:
-            self.gateway.write_log(
-                u'leg1:{0}涨停{1}，不合成价差Tick'.format(self.last_leg1_tick.vt_symbol, self.last_leg1_tick.bid_price_1))
-            return
-        if (self.last_leg1_tick.bid_price_1 == 0 or self.last_leg1_tick.ask_price_1 == self.last_leg1_tick.limit_down) \
-                and self.last_leg1_tick.bid_volume_1 == 0:
-            self.gateway.write_log(
-                u'leg1:{0}跌停{1}，不合成价差Tick'.format(self.last_leg1_tick.vt_symbol, self.last_leg1_tick.ask_price_1))
-            return
-        if (self.last_leg2_tick.ask_price_1 == 0 or self.last_leg2_tick.bid_price_1 == self.last_leg2_tick.limit_up) \
-                and self.last_leg2_tick.ask_volume_1 == 0:
-            self.gateway.write_log(
-                u'leg2:{0}涨停{1}，不合成价差Tick'.format(self.last_leg2_tick.vt_symbol, self.last_leg2_tick.bid_price_1))
-            return
-        if (self.last_leg2_tick.bid_price_1 == 0 or self.last_leg2_tick.ask_price_1 == self.last_leg2_tick.limit_down) \
-                and self.last_leg2_tick.bid_volume_1 == 0:
-            self.gateway.write_log(
-                u'leg2:{0}跌停{1}，不合成价差Tick'.format(self.last_leg2_tick.vt_symbol, self.last_leg2_tick.ask_price_1))
-            return
-
-        if self.trading_day != tick.trading_day:
-            self.trading_day = tick.trading_day
-            self.spread_high = None
-            self.spread_low = None
-            self.ratio_high = None
-            self.ratio_low = None
-
-        if self.is_spread:
-            spread_tick = TickData(gateway_name=self.gateway_name,
-                                   symbol=self.symbol,
-                                   exchange=Exchange.SPD,
-                                   datetime=tick.datetime)
-
-            spread_tick.trading_day = tick.trading_day
-            spread_tick.date = tick.date
-            spread_tick.time = tick.time
-
-            # 叫卖价差=leg1.ask_price_1 * 配比 - leg2.bid_price_1 * 配比，volume为两者最小
-            spread_tick.ask_price_1 = round_to(target=self.price_tick,
-                                               value=self.last_leg1_tick.ask_price_1 * self.leg1_ratio - self.last_leg2_tick.bid_price_1 * self.leg2_ratio)
-            spread_tick.ask_volume_1 = min(self.last_leg1_tick.ask_volume_1, self.last_leg2_tick.bid_volume_1)
-
-            # 叫买价差=leg1.bid_price_1 * 配比 - leg2.ask_price_1 * 配比，volume为两者最小
-            spread_tick.bid_price_1 = round_to(target=self.price_tick,
-                                               value=self.last_leg1_tick.bid_price_1 * self.leg1_ratio - self.last_leg2_tick.ask_price_1 * self.leg2_ratio)
-            spread_tick.bid_volume_1 = min(self.last_leg1_tick.bid_volume_1, self.last_leg2_tick.ask_volume_1)
-
-            # 最新价
-            spread_tick.last_price = round_to(target=self.price_tick,
-                                              value=(spread_tick.ask_price_1 + spread_tick.bid_price_1) / 2)
-            # 昨收盘价
-            if self.last_leg2_tick.pre_close > 0 and self.last_leg1_tick.pre_close > 0:
-                spread_tick.pre_close = round_to(target=self.price_tick,
-                                                 value=self.last_leg1_tick.pre_close * self.leg1_ratio - self.last_leg2_tick.pre_close * self.leg2_ratio)
-            # 开盘价
-            if self.last_leg2_tick.open_price > 0 and self.last_leg1_tick.open_price > 0:
-                spread_tick.open_price = round_to(target=self.price_tick,
-                                                  value=self.last_leg1_tick.open_price * self.leg1_ratio - self.last_leg2_tick.open_price * self.leg2_ratio)
-            # 最高价
-            if self.spread_high:
-                self.spread_high = max(self.spread_high, spread_tick.ask_price_1)
-            else:
-                self.spread_high = spread_tick.ask_price_1
-            spread_tick.high_price = self.spread_high
-
-            # 最低价
-            if self.spread_low:
-                self.spread_low = min(self.spread_low, spread_tick.bid_price_1)
-            else:
-                self.spread_low = spread_tick.bid_price_1
-
-            spread_tick.low_price = self.spread_low
-
-            self.gateway.on_tick(spread_tick)
-
-        if self.is_ratio:
-            ratio_tick = TickData(
-                gateway_name=self.gateway_name,
-                symbol=self.symbol,
-                exchange=Exchange.SPD,
-                datetime=tick.datetime
-            )
-
-            ratio_tick.trading_day = tick.trading_day
-            ratio_tick.date = tick.date
-            ratio_tick.time = tick.time
-
-            # 比率tick = (腿1 * 腿1 手数 / 腿2价格 * 腿2手数) 百分比
-            ratio_tick.ask_price_1 = 100 * self.last_leg1_tick.ask_price_1 * self.leg1_ratio \
-                                     / (self.last_leg2_tick.bid_price_1 * self.leg2_ratio)  # noqa
-            ratio_tick.ask_price_1 = round_to(
-                target=self.price_tick,
-                value=ratio_tick.ask_price_1
-            )
-
-            ratio_tick.ask_volume_1 = min(self.last_leg1_tick.ask_volume_1, self.last_leg2_tick.bid_volume_1)
-            ratio_tick.bid_price_1 = 100 * self.last_leg1_tick.bid_price_1 * self.leg1_ratio \
-                                     / (self.last_leg2_tick.ask_price_1 * self.leg2_ratio)  # noqa
-            ratio_tick.bid_price_1 = round_to(
-                target=self.price_tick,
-                value=ratio_tick.bid_price_1
-            )
-
-            ratio_tick.bid_volume_1 = min(self.last_leg1_tick.bid_volume_1, self.last_leg2_tick.ask_volume_1)
-            ratio_tick.last_price = (ratio_tick.ask_price_1 + ratio_tick.bid_price_1) / 2
-            ratio_tick.last_price = round_to(
-                target=self.price_tick,
-                value=ratio_tick.last_price
-            )
-
-            # 昨收盘价
-            if self.last_leg2_tick.pre_close > 0 and self.last_leg1_tick.pre_close > 0:
-                ratio_tick.pre_close = 100 * self.last_leg1_tick.pre_close * self.leg1_ratio / (
-                        self.last_leg2_tick.pre_close * self.leg2_ratio)  # noqa
-                ratio_tick.pre_close = round_to(
-                    target=self.price_tick,
-                    value=ratio_tick.pre_close
-                )
-
-            # 开盘价
-            if self.last_leg2_tick.open_price > 0 and self.last_leg1_tick.open_price > 0:
-                ratio_tick.open_price = 100 * self.last_leg1_tick.open_price * self.leg1_ratio / (
-                        self.last_leg2_tick.open_price * self.leg2_ratio)  # noqa
-                ratio_tick.open_price = round_to(
-                    target=self.price_tick,
-                    value=ratio_tick.open_price
-                )
-
-            # 最高价
-            if self.ratio_high:
-                self.ratio_high = max(self.ratio_high, ratio_tick.ask_price_1)
-            else:
-                self.ratio_high = ratio_tick.ask_price_1
-            ratio_tick.high_price = self.spread_high
-
-            # 最低价
-            if self.ratio_low:
-                self.ratio_low = min(self.ratio_low, ratio_tick.bid_price_1)
-            else:
-                self.ratio_low = ratio_tick.bid_price_1
-
-            ratio_tick.low_price = self.spread_low
-
-            self.gateway.on_tick(ratio_tick)

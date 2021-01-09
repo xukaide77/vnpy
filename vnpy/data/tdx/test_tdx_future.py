@@ -64,15 +64,15 @@ corr_rate = round(abs(corr.iloc[0, 1]) * 100, 2)
 # api_01.get_bars('IF99', period='1min', callback=t1.display_bar, bar_freq=1)
 
 # 获取bar，只返回 list[dict]
-
-result, bars = api_01.get_bars('SA2101', period='1min', return_bar=False)
-if result:
-    print('前十根bar')
-    for bar in bars[0:10]:
-        print(bar)
-    print('后十根bar')
-    for bar in bars[-10:]:
-        print(bar)
+#
+# result, bars = api_01.get_bars('SA99', period='1min', return_bar=False)
+# if result:
+#     print('前十根bar')
+#     for bar in bars[0:10]:
+#         print(bar)
+#     print('后十根bar')
+#     for bar in bars[-10:]:
+#         print(bar)
 
 # result,datas = api_01.get_transaction_data(symbol='ni1905')
 # api_02 = TdxFutureData(t2)
@@ -83,10 +83,10 @@ if result:
 #for r in result[0:10] + result[-10:]:
 #    print(r)
 
-# 获取历史分时数据
-# ret, result = api_01.get_history_transaction_data('RB99', '20190109')
+# # 获取历史分时数据
+# ret, result = api_01.get_history_transaction_data('RB99', '20201027')
 # for r in result[0:10] + result[-10:]:
-#    print(r)
+#     print(r)
 
 # 更新本地合约缓存信息
-#api_01.update_mi_contracts()
+api_01.update_mi_contracts()

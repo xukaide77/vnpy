@@ -121,6 +121,8 @@ class CtaTemplate(ABC):
                 'pnl': v.pnl
             })
 
+        if len(pos_list) > 0:
+            self.write_log(f'策略返回持仓信息:{pos_list}')
         return pos_list
 
     @virtual
@@ -543,8 +545,12 @@ class CtaStockTemplate(CtaTemplate):
             self.write_error(f'加载缓存K线数据失败:{str(ex)}')
         return None
 
-    def get_klines_snapshot(self):
-        """返回当前klines的切片数据"""
+    def get_klines_snapshot(self, include_kline_names=[]):
+        """
+        返回当前klines的切片数据
+        :param include_kline_names: 如果存在，则只保留这些指定得K线
+        :return:
+        """
         try:
             self.write_log(f'获取{self.strategy_name}的切片数据')
             d = {
@@ -552,6 +558,9 @@ class CtaStockTemplate(CtaTemplate):
                 'datetime': datetime.now()}
             klines = {}
             for kline_name in sorted(self.klines.keys()):
+                if len(include_kline_names) > 0:
+                    if kline_name not in include_kline_names:
+                        continue
                 klines.update({kline_name: self.klines.get(kline_name).get_data()})
             kline_names = list(klines.keys())
             binary_data = zlib.compress(pickle.dumps(klines))

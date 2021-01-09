@@ -847,6 +847,11 @@ class BackTestingEngine(object):
         # 更新vt_symbol合约与策略的订阅关系
         self.subscribe_symbol(strategy_name=strategy_name, vt_symbol=vt_symbol)
 
+        # 如果idx_symbol不再列表中，需要订阅
+        if 'idx_symbol' in setting.keys() and setting['idx_symbol'] not in self.symbol_strategy_map.keys():
+            self.write_log(f"新增订阅指数合约:{setting['idx_symbol']}")
+            self.subscribe_symbol(strategy_name=strategy_name, vt_symbol=setting['idx_symbol'])
+
         if strategy_setting.get('auto_init', False):
             self.write_log(u'自动初始化策略')
             strategy.on_init()
@@ -863,6 +868,7 @@ class BackTestingEngine(object):
         """订阅合约"""
         strategy = self.strategies.get(strategy_name, None)
         if not strategy:
+            self.write_log(f'策略{strategy_name}对应的实例不存在，订阅{vt_symbol}失败')
             return False
 
         # 添加 合约订阅 vt_symbol <=> 策略实例 strategy 映射.

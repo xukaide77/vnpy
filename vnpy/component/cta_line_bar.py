@@ -31,7 +31,6 @@ from vnpy.trader.object import BarData, TickData
 from vnpy.trader.constant import Interval, Color
 from vnpy.trader.utility import round_to, get_trading_date, get_underlying_symbol
 
-
 try:
     from vnpy.component.chanlun import ChanGraph, ChanLibrary
 except Exception as ex:
@@ -164,7 +163,7 @@ class CtaLineBar(object):
         self.underly_symbol = ''  # 商品的短代码
         self.price_tick = 1  # 商品的最小价格单位
         self.round_n = 4  # round() 小数点的截断数量
-        self.is_7x24 = False    # 是否7x24小时运行（ 一般为数字货币）
+        self.is_7x24 = False  # 是否7x24小时运行（ 一般为数字货币）
 
         # 当前的Tick的信息
         self.cur_tick = None  # 当前 onTick()函数接收的 最新的tick
@@ -200,7 +199,9 @@ class CtaLineBar(object):
         self.mid5_array[:] = np.nan
         # 导出到CSV文件 的目录名 和 要导出的 字段
         self.export_filename = None  # 数据要导出的目标文件夹
-        self.export_fields = []  # 定义要导出的数据字段
+        self.export_fields = []      # 定义要导出的K线数据字段（包含K线元素，主图指标，附图指标等）
+        self.export_bi_filename = None  # 通过唐其安通道输出得笔csv文件(不是缠论得笔)
+        self.export_zs_filename = None  # 通过唐其安通道输出的中枢csv文件（不是缠论的笔中枢）
 
         # 创建本类型bar的内部变量，以及添加所有指标输入参数，到self.param_list列表
         self.init_properties()
@@ -215,7 +216,7 @@ class CtaLineBar(object):
         # 注册回调函数
         self.cb_dict = {}
 
-        self.minute_interval = None   # 把各个周期的bar转换为分钟，在first_tick中，用来修正bar为整点分钟周期
+        self.minute_interval = None  # 把各个周期的bar转换为分钟，在first_tick中，用来修正bar为整点分钟周期
         if setting:
             self.set_params(setting)
 
@@ -233,7 +234,7 @@ class CtaLineBar(object):
             if self.price_tick < 1:
                 exponent = decimal.Decimal(str(self.price_tick))
                 self.round_n = max(abs(exponent.as_tuple().exponent) + 2, 4)
-                #self.write_log(f'round_n: {self.round_n}')
+                # self.write_log(f'round_n: {self.round_n}')
 
             # 导入卡尔曼过滤器
             if self.para_active_kf:
@@ -267,11 +268,11 @@ class CtaLineBar(object):
         """初始化添加，本类型bar的内部变量，以及添加所有指标输入参数，到self.param_list列表"""
         # ------- 本类型bar的内部变量   ---------
         self.param_list.append('name')  # K线的名称
-        self.param_list.append('bar_interval') # bar的周期数量
-        self.param_list.append('interval')   # bar的类型
-        self.param_list.append('mode')   # tick/bar模式
-        self.param_list.append('is_7x24') #是否为7X24小时运行的bar（一般为数字货币)
-        self.param_list.append('price_tick') # 最小跳动，用于处理指数等不一致的价格
+        self.param_list.append('bar_interval')  # bar的周期数量
+        self.param_list.append('interval')  # bar的类型
+        self.param_list.append('mode')  # tick/bar模式
+        self.param_list.append('is_7x24')  # 是否为7X24小时运行的bar（一般为数字货币)
+        self.param_list.append('price_tick')  # 最小跳动，用于处理指数等不一致的价格
         self.param_list.append('underly_symbol')  # 短合约，
 
         # ----------  下方为指标输入参数     ---------------
@@ -281,7 +282,9 @@ class CtaLineBar(object):
         self.param_list.append('para_ma2_len')
         self.param_list.append('para_ma3_len')
 
-        self.param_list.append('para_ema1_len') # 三条EMA均线
+        self.param_list.append('para_ama_len')  # 自适应均线
+
+        self.param_list.append('para_ema1_len')  # 三条EMA均线
         self.param_list.append('para_ema2_len')
         self.param_list.append('para_ema3_len')
 
@@ -292,10 +295,10 @@ class CtaLineBar(object):
         self.param_list.append('para_atr2_len')
         self.param_list.append('para_atr3_len')
 
-        self.param_list.append('para_vol_len')   # 成交量平均
+        self.param_list.append('para_vol_len')  # 成交量平均
 
-        self.param_list.append('para_jbjs_threshold')         # 大单判断比例 （机构买、机构卖指标）
-        self.param_list.append('para_outstanding_capitals')   # 股票的流通市值 （机构买、机构卖指标）
+        self.param_list.append('para_jbjs_threshold')  # 大单判断比例 （机构买、机构卖指标）
+        self.param_list.append('para_outstanding_capitals')  # 股票的流通市值 （机构买、机构卖指标）
 
         self.param_list.append('para_active_tt')  # 计算日内均价线
 
@@ -305,8 +308,8 @@ class CtaLineBar(object):
         self.param_list.append('para_cmi_len')  #
 
         self.param_list.append('para_boll_len')  # 布林通道长度（文华计算方式）
-        self.param_list.append('para_boll_tb_len') # 布林通道长度（tb计算方式）
-        self.param_list.append('para_boll_std_rate') # 标准差倍率，一般为2
+        self.param_list.append('para_boll_tb_len')  # 布林通道长度（tb计算方式）
+        self.param_list.append('para_boll_std_rate')  # 标准差倍率，一般为2
         self.param_list.append('para_boll2_len')  # 第二条布林通道
         self.param_list.append('para_boll2_tb_len')
         self.param_list.append('para_boll2_std_rate')
@@ -353,8 +356,7 @@ class CtaLineBar(object):
 
         self.param_list.append('para_bd_len')
 
-        self.param_list.append('para_active_chanlun') # 激活缠论
-
+        self.param_list.append('para_active_chanlun')  # 激活缠论
 
     def init_properties(self):
         """
@@ -388,7 +390,7 @@ class CtaLineBar(object):
     def restore(self, state):
         """从Pickle中恢复数据"""
         for key in state.__dict__.keys():
-            if key in [ 'chan_lib']:
+            if key in ['chan_lib']:
                 continue
             self.__dict__[key] = state.__dict__[key]
 
@@ -401,6 +403,8 @@ class CtaLineBar(object):
         self.para_ma1_len = 0  # 10        # 第一根MA均线的周期长度
         self.para_ma2_len = 0  # 20        # 第二根MA均线的周期长度
         self.para_ma3_len = 0  # 120       # 第三根MA均线的周期长度
+
+        self.para_ama_len = 0  # 10        # 自适应AMA均线周期
 
         self.para_ema1_len = 0  # 13       # 第一根EMA均线的周期长度
         self.para_ema2_len = 0  # 21       # 第二根EMA均线的周期长度
@@ -415,10 +419,10 @@ class CtaLineBar(object):
 
         self.para_vol_len = 0  # 14           # 平均交易量的计算周期
 
-        self.para_jbjs_threshold = 0          # 大单判断比例（机构买、机构卖指标）
-        self.para_outstanding_capitals = 0    # 股票的流通股数-万万股（机构买、机构卖指标）
+        self.para_jbjs_threshold = 0  # 大单判断比例（机构买、机构卖指标）
+        self.para_outstanding_capitals = 0  # 股票的流通股数-万万股（机构买、机构卖指标）
 
-        self.para_active_tt = False           # 是否激活均价线计算
+        self.para_active_tt = False  # 是否激活均价线计算
 
         self.para_rsi1_len = 0  # 7     # RSI 相对强弱指数（快曲线）
         self.para_rsi2_len = 0  # 14    # RSI 相对强弱指数（慢曲线）
@@ -474,11 +478,20 @@ class CtaLineBar(object):
         self.para_bias2_len = 0  # 乖离率观测周期2
         self.para_bias3_len = 0  # 乖离率观测周期3
 
-        self.para_bd_len = 0   # 波段买卖观测长度
+        self.para_bd_len = 0  # 波段买卖观测长度
 
         # --------------- K 线的指标相关计算结果数据 ----------------
+        # 唐其安通道
         self.line_pre_high = []  # K线的前para_pre_len的的最高
         self.line_pre_low = []  # K线的前para_pre_len的的最低
+        # 唐其安高点、低点清单（相当于缠论的分型）
+        self.tqn_high_list = []  # 所有的创新高的高点(分型）清单 { "price":xxx, "datetime": "yyyy-mm-dd HH:MM:SS"}
+        self.tqn_low_list = []  # 所有的创新低的低点（分型）清单 { "price":xxx, "datetime": "yyyy-mm-dd HH:MM:SS"}
+        # 唐其安笔清单，相当与缠论的笔,最后一笔是未完成的
+        self.tqn_bi_list = []
+        # 唐其安中枢清单，相当于缠论的中枢
+        self.cur_tqn_zs = {}  # 当前唐其安中枢。
+        self.tqn_zs_list = []
 
         self.line_ma1 = []  # K线的MA(para_ma1_len)均线，不包含未走完的bar
         self.line_ma2 = []  # K线的MA(para_ma2_len)均线，不包含未走完的bar
@@ -496,6 +509,19 @@ class CtaLineBar(object):
         self.ma12_count = 0  # ma1 与 ma2 ,金叉/死叉后第几根bar，金叉正数，死叉负数
         self.ma13_count = 0  # ma1 与 ma3 ,金叉/死叉后第几根bar，金叉正数，死叉负数
         self.ma23_count = 0  # ma2 与 ma3 ,金叉/死叉后第几根bar，金叉正数，死叉负数
+
+        self.ma12_cross = None  # ma1 与 ma2 ,金叉/死叉的点数值
+        self.ma13_cross = None  # ma1 与 ma3 ,金叉/死叉的点数值
+        self.ma23_cross = None  # ma2 与 ma3 ,金叉/死叉的点数值
+
+        self.ma12_cross_price = None  # ma1 与 ma2 ,金叉/死叉时，K线价格数值
+        self.ma13_cross_price = None  # ma1 与 ma3 ,金叉/死叉时，K线价格数值
+        self.ma23_cross_price = None  # ma2 与 ma3 ,金叉/死叉时，K线价格数值
+
+        self.cur_ama = 0
+        self.line_ama = []  # K线的AMA 均线，周期是para_ema1_len
+        self.cur_er = 0  # 当前变动速率
+        self.line_ama_er = []  # 变动速率:=整个周期价格的总体变动/每个周期价格变动的累加, +正数，向上 变动，负数，向下变动
 
         self.line_ema1 = []  # K线的EMA1均线，周期是para_ema1_len1，不包含当前bar
         self.line_ema2 = []  # K线的EMA2均线，周期是para_ema1_len2，不包含当前bar
@@ -656,22 +682,22 @@ class CtaLineBar(object):
         self.kf2 = None
         self.line_state_mean = []  # 卡尔曼均线
         self.line_state_upper = []  # 卡尔曼均线+2标准差
-        self.line_state_lower = [] # 卡尔曼均线-2标准差
+        self.line_state_lower = []  # 卡尔曼均线-2标准差
         self.line_state_covar = []  # 方差
         self.cur_state_std = None
         self.line_state_mean2 = []  # 卡尔曼均线2
         self.line_state_covar2 = []  # 方差
-        self.kf12_count = 0     # 卡尔曼均线金叉死叉
+        self.kf12_count = 0  # 卡尔曼均线金叉死叉
 
         # SAR 抛物线
         self.cur_sar_direction = ''  # up/down
         self.line_sar = []
         self.line_sar_top = []
         self.line_sar_buttom = []
-        self.line_sar_sr_up = []
+        self.line_sar_sr_up = []  # 当前得上升抛物线
         self.line_sar_ep_up = []
         self.line_sar_af_up = []
-        self.line_sar_sr_down = []
+        self.line_sar_sr_down = []  # 当前得下跌抛物线
         self.line_sar_ep_down = []
         self.line_sar_af_down = []
         self.cur_sar_count = 0  # SAR 上升下降变化后累加
@@ -910,7 +936,7 @@ class CtaLineBar(object):
         self.mid5_array[-1] = bar_mid5
 
         # 计算当前self.line_bar长度，并维持self.line_bar序列在max_hold_bars长度
-        self.bar_len = len(self.line_bar)   # 当前K线得真实数量(包含已经合成以及正在合成的bar)
+        self.bar_len = len(self.line_bar)  # 当前K线得真实数量(包含已经合成以及正在合成的bar)
         if self.bar_len > self.max_hold_bars:
             del self.line_bar[0]
             self.dict_dif.pop(self.index_list[0], None)
@@ -919,6 +945,7 @@ class CtaLineBar(object):
 
         self.__count_pre_high_low()
         self.__count_ma()
+        self.__count_ama()
         self.__count_ema()
         self.__count_dmi()
         self.__count_atr()
@@ -1077,9 +1104,9 @@ class CtaLineBar(object):
 
         if self.para_jbjs_threshold > 0 and len(self.line_jb) > 0 and len(self.line_js) > 0:
             msg = msg + u',JBJS({0} {1}):{2} {3}'.format(self.para_jbjs_threshold,
-                                                      self.para_outstanding_capitals,
-                                                      self.line_jb[-1],
-                                                      self.line_js[-1])
+                                                         self.para_outstanding_capitals,
+                                                         self.line_jb[-1],
+                                                         self.line_js[-1])
 
         if self.para_active_tt > 0 and len(self.line_tt) > 0:
             msg = msg + u',TT:{0}'.format(self.line_tt[-1])
@@ -1108,7 +1135,8 @@ class CtaLineBar(object):
                                                                       round(self.line_j[-1], self.round_n))
 
         if self.para_cci_len > 0 and len(self.line_cci) > 0 and len(self.line_cci_ema) > 0:
-            msg = msg + u',Cci({0}):{1}, EMA(Cci):{2}'.format(self.para_cci_len, self.line_cci[-1], self.line_cci_ema[-1])
+            msg = msg + u',Cci({0}):{1}, EMA(Cci):{2}'.format(self.para_cci_len, self.line_cci[-1],
+                                                              self.line_cci_ema[-1])
 
         if (self.para_boll_len > 0 or self.para_boll_tb_len > 0) and len(self.line_boll_upper) > 0:
             msg = msg + u',Boll({}):std:{},mid:{},up:{},low:{},Atan:[mid:{},up:{},low:{}]'. \
@@ -1382,19 +1410,461 @@ class CtaLineBar(object):
 
         # 2.计算前self.para_pre_len周期内的Bar高点和低点(不包含当前周期，因为当前正在合成的bar
         # 还未触发on_bar，不会存入开高低收序列）
-        preHigh = max(self.high_array[-count_len:])
-        preLow = min(self.low_array[-count_len:])
-        if np.isnan(preHigh) or np.isnan(preLow):
+        pre_high = max(self.high_array[-count_len:])
+        pre_low = min(self.low_array[-count_len:])
+        if np.isnan(pre_high) or np.isnan(pre_low):
             return
         # 保存前高值到 前高序列
         if len(self.line_pre_high) > self.max_hold_bars:  # 维持最大缓存数量 超过则删除最前面
             del self.line_pre_high[0]
-        self.line_pre_high.append(preHigh)
+        self.line_pre_high.append(pre_high)
 
         # 保存前低值到 前低序列
         if len(self.line_pre_low) > self.max_hold_bars:  # 维持最大缓存数量 超过则删除最前面
             del self.line_pre_low[0]
-        self.line_pre_low.append(preLow)
+        self.line_pre_low.append(pre_low)
+
+        if len(self.line_pre_high) < 2 and len(self.line_pre_low) < 2:
+            return
+
+        # 产生新得高点
+        if pre_high > self.line_pre_high[-2] and pre_low == self.line_pre_low[-2]:
+            d = {
+                'price': pre_high,
+                'datetime': self.cur_datetime.strftime('%Y-%m-%d %H:%M:%S')
+            }
+            # 顺便记录下MACD & DIF， 便于判断是否顶背离
+            if len(self.line_dif) > 0:
+                d.update({'dif': self.line_dif[-1]})
+            if len(self.line_macd) > 0:
+                d.update({'macd': self.line_macd[-1]})
+            # 当前不存在最后的高点，创建一个
+            if len(self.tqn_high_list) == 0:
+                self.tqn_high_list.append(d)
+                return
+
+            # 如果存在最后的高点，最后的低点
+            last_low_time = self.tqn_low_list[-1].get('datetime', None) if len(self.tqn_low_list) > 0 else None
+            last_high_time = self.tqn_high_list[-1].get('datetime', None) if len(
+                self.tqn_high_list) > 0 else None
+            last_high_price = self.tqn_high_list[-1].get('price') if len(
+                self.tqn_high_list) > 0 else None
+
+            # 低点的时间，比高点的时间更晚, 添加一个新的高点
+            if last_low_time is not None and last_high_time is not None and last_high_time < last_low_time:
+                # 添加一个新的高点
+                self.tqn_high_list.append(d)
+                # 创建一个未走完的笔，低点-> 高点
+                self.create_tqn_bi(direction=Direction.LONG)
+                # 输出确定的一笔（高点->低点) =>csv文件
+                self.export_tqn_bi()
+                # 计算是否有中枢
+                self.update_tqn_zs()
+                return
+
+            # 延续当前的高点
+            if pre_high > last_high_price:
+                self.tqn_high_list[-1].update(d)
+                self.update_tnq_bi(point=d, direction=Direction.LONG)
+                # 计算是否有中枢
+                self.update_tqn_zs()
+
+        # 产生新得低点
+        if pre_low < self.line_pre_low[-2] and pre_high == self.line_pre_high[-2]:
+
+            d = {'price': pre_low,
+                 'datetime': self.cur_datetime.strftime('%Y-%m-%d %H:%M:%S')}
+
+            # 顺便记录下MACD & DIF， 便于判断是否顶背离
+            if len(self.line_dif) > 0:
+                d.update({'dif': self.line_dif[-1]})
+            if len(self.line_macd) > 0:
+                d.update({'macd': self.line_macd[-1]})
+
+            # 当前不存在最后的低点，创建一个
+            if len(self.tqn_low_list) == 0:
+                self.tqn_low_list.append(d)
+                return
+
+            # 如果存在最后的高点，最后的低点
+            last_low_time = self.tqn_low_list[-1].get('datetime', None) if len(
+                self.tqn_low_list) > 0 else None
+            last_high_time = self.tqn_high_list[-1].get('datetime', None) if len(
+                self.tqn_high_list) > 0 else None
+            last_low_price = self.tqn_low_list[-1].get('price', None) if len(
+                self.tqn_low_list) > 0 else None
+
+            # 高点的时间，比低点的时间更晚, 添加一个新的低点
+            if last_low_time is not None and last_high_time is not None and last_low_time < last_high_time:
+                # 添加一个新的低点
+                self.tqn_low_list.append(d)
+                # 创建一个未走完的笔， 高点->低点
+                self.create_tqn_bi(direction=Direction.SHORT)
+                # 输出确定的一笔（低点->高点) =>csv文件
+                self.export_tqn_bi()
+                # 计算是否有中枢
+                self.update_tqn_zs()
+                return
+
+            # 延续当前的低点
+            if pre_low < last_low_price:
+                self.tqn_low_list[-1].update(d)
+                self.update_tnq_bi(point=d, direction=Direction.SHORT)
+                # 计算是否有中枢
+                self.update_tqn_zs()
+
+    def create_tqn_bi(self, direction):
+        """
+        创建唐其安的笔，该笔未走完的
+        :param direction: 笔的方向 direction Direction.Long, Direction.Short
+        :return:
+        """
+        # Direction => int
+        if direction == Direction.LONG:
+            direction = 1
+        else:
+            direction = -1
+
+        if len(self.tqn_bi_list) > self.max_hold_bars:  # 维持最大缓存数量 超过则删除最前面
+            del self.tqn_bi_list[0]
+
+        # 从低=>高得线段, self.line_low_list[-1] => self.line_high_list[-1]
+        if direction == 1:
+            if len(self.tqn_low_list) < 1:
+                return
+            low_point = self.tqn_low_list[-1]
+            high_point = self.tqn_high_list[-1]
+            d = {
+                "start": low_point.get('datetime'),
+                "end": high_point.get('datetime'),
+                "direction": direction,
+                "height": abs(high_point.get('price') - low_point.get('price')),
+                "high": high_point.get('price'),
+                "low": low_point.get('price')
+            }
+            self.tqn_bi_list.append(d)
+
+        # 从高=>低得线段, self.line_high_list[-1] => self.line_low_list[-1]
+        else:
+            if len(self.tqn_high_list) < 1:
+                return
+            high_point = self.tqn_high_list[-1]
+            low_point = self.tqn_low_list[-1]
+            d = {
+                "start": high_point.get('datetime'),
+                "end": low_point.get('datetime'),
+                "direction": direction,
+                "height": abs(high_point.get('price') - low_point.get('price')),
+                "high": high_point.get('price'),
+                "low": low_point.get('price')
+            }
+            self.tqn_bi_list.append(d)
+
+    def update_tnq_bi(self, point, direction):
+        """
+        更新最后一根唐其安的笔"
+        :param point:  dict: {"price", "datetime"}
+        :param direction:
+        :return:
+        """
+        if len(self.tqn_bi_list) < 1:
+            return
+
+        # Direction => int
+        if direction == Direction.LONG:
+            direction = 1
+        else:
+            direction = -1
+
+        bi = self.tqn_bi_list[-1]
+        if bi.get('direction') != direction:
+            return
+        # 方向为多
+        if direction == 1:
+            bi.update({
+                "end": point.get('datetime'),
+                "height": abs(point.get('price') - bi.get('low')),
+                "high": point.get('price'),
+            })
+        # 方向为空
+        else:
+            bi.update({
+                "end": point.get('datetime'),
+                "height": abs(bi.get('high') - point.get('price')),
+                "low": point.get('price'),
+            })
+
+    def export_tqn_bi(self):
+        """
+        唐其安高点、低点形成的笔，输出.csv文件
+        start.end,direction,height,high,low
+        2019-01-02 14:15:00,2019-01-02 11:09:00,1,4.0,496.0,492.0
+        :param: direction Direction.Long, Direction.Short
+        :return:
+        """
+        if self.export_bi_filename is None:
+            return
+
+        if len(self.tqn_bi_list) < 2:
+            return
+
+        # 直接插入倒数第二条记录，即已经走完的笔
+        self.append_data(file_name=self.export_bi_filename,
+                         dict_data=self.tqn_bi_list[-2],
+                         field_names=["start", "end", "direction", "height", "high", "low"]
+                         )
+
+        # # Direction => int
+        # if direction == Direction.LONG:
+        #     direction = 1
+        # else:
+        #     direction = -1
+        #
+        # 从低=>高得线段, self.line_low_list[-2] => self.line_high_list[-1]
+        # if direction == 1:
+        # if len(self.tqn_low_list) < 2:
+        #     return
+        # low_point = self.tqn_low_list[-2]
+        # high_point = self.tqn_high_list[-1]
+        # d = {
+        #     "start": low_point.get('datetime'),
+        #     "end": high_point.get('datetime'),
+        #     "direction": direction,
+        #     "height": abs(high_point.get('price') - low_point.get('price')),
+        #     "high": high_point.get('price'),
+        #     "low": low_point.get('price')
+        # }
+        # if len(self.tqn_bi_list) < 2:
+        #     return
+        #
+        # self.append_data(file_name=self.export_bi_filename,
+        #                  dict_data=d,
+        #                  field_names=["start","end", "direction", "height", "high", "low"]
+        #                  )
+        # 从高=>低得线段, self.line_high_list[-2] => self.line_low_list[-1]
+        # else:
+        #     if len(self.tqn_high_list) < 2:
+        #         return
+        #     high_point = self.tqn_high_list[-2]
+        #     low_point = self.tqn_low_list[-1]
+        #     d = {
+        #         "start": high_point.get('datetime'),
+        #         "end": low_point.get('datetime'),
+        #         "direction": direction,
+        #         "height": abs(high_point.get('price') - low_point.get('price')),
+        #         "high": high_point.get('price'),
+        #         "low": low_point.get('price')
+        #     }
+        #     self.append_data(file_name=self.export_bi_filename,
+        #                      dict_data=d,
+        #                      field_names=["start", "end", "direction", "height", "high", "low"]
+        #                      )
+
+    def update_tqn_zs(self):
+        """
+        更新唐其安中枢
+        这里跟缠论的中枢不同，主要根据最后一笔，判断是否与前2、前三，形成中枢。
+        三笔形成的中枢，不算完整；
+        四笔形成的中枢，才算完整
+        如果形成，更新；如果不形成，则剔除
+        :return:
+        """
+        if len(self.tqn_bi_list) < 4:
+            return
+
+        cur_bi = self.tqn_bi_list[-1]  # 当前笔
+        second_bi = self.tqn_bi_list[-2]  # 倒数第二笔
+        third_bi = self.tqn_bi_list[-3]  # 倒数第三笔
+        four_bi = self.tqn_bi_list[-4]  # 倒数第四笔
+
+        # 当前笔的方向
+        direction = cur_bi.get('direction')
+
+        # 当前没有中枢
+        if len(self.cur_tqn_zs) == 0:
+            # 1,3 的重叠的线段
+            first_third_high = min(third_bi.get('high'), cur_bi.get('high'))
+            first_third_low = max(third_bi.get('low'), cur_bi.get('low'))
+
+            # 2,4 的重叠线段
+            second_four_high = min(four_bi.get('high'), second_bi.get('high'))
+            second_four_low = max(four_bi.get('low'), second_bi.get('low'))
+
+            # 上涨中 1-3，2-4 形成重叠
+            if second_four_low <= first_third_low < second_four_high <= first_third_high:
+                # 中枢的方向按照第四笔
+                self.cur_tqn_zs = {
+                    "direction": four_bi.get('direction'),  # 段的方向：进入笔的方向
+                    "start": four_bi.get('end'),  # zs的开始
+                    "end": cur_bi.get("end"),  # zs的结束时间
+                    "high": min(first_third_high, second_four_high),
+                    "low": max(first_third_low, second_four_low),
+                    "highs": [second_four_high],  # 确认的高点清单（后续不能超过）
+                    "lows": [second_four_low],  # 确认的低点清单（后续不能超过）
+                    "exit_direction": cur_bi.get('direction'),  # 离开笔的方向
+                    "exit_start": cur_bi.get('start')
+                }
+                # 更新中枢高度
+                self.cur_tqn_zs.update({
+                    "height": self.cur_tqn_zs.get('high') - self.cur_tqn_zs.get('low')
+                })
+                return
+
+            # 下跌中 1-3，2-4 形成重叠
+            if first_third_low <= second_four_low < first_third_high <= second_four_high:
+                # 中枢的方向按照第四笔
+                self.cur_tqn_zs = {
+                    "direction": four_bi.get('direction'),  # 段的方向：进入笔的方向
+                    "start": four_bi.get('end'),  # zs的开始
+                    "end": cur_bi.get("end"),  # zs的结束时间
+                    "high": min(first_third_high, second_four_high),
+                    "low": max(first_third_low, second_four_low),
+                    "highs": [second_four_high],  # 确认的高点清单（后续不能超过）
+                    "lows": [second_four_low],  # 确认的低点清单（后续不能超过）
+                    "exit_direction": cur_bi.get('direction'),  # 离开笔的方向
+                    "exit_start": cur_bi.get('start')
+                }
+                # 更新中枢高度
+                self.cur_tqn_zs.update({
+                    "height": self.cur_tqn_zs.get('high') - self.cur_tqn_zs.get('low')
+                })
+
+            return
+
+        # 当前存在中枢
+
+        # 最后一笔是多，且低点在中枢高点上方，中枢确认结束
+        if direction == 1 and cur_bi.get('low') > self.cur_tqn_zs.get('high'):
+            self.export_tqn_zs()
+            self.cur_tqn_zs = {}
+            return
+
+        # 最后一笔是空，且高点在中枢下方，中枢确认结束
+        if direction == -1 and cur_bi.get('high') < self.cur_tqn_zs.get('low'):
+            self.export_tqn_zs()
+            self.cur_tqn_zs = {}
+            return
+
+        # 当前笔，是zs的最后一笔
+        if cur_bi.get("start") == self.cur_tqn_zs.get("exit_start"):
+            # 当前笔是做多,判断是否创新高
+
+            if direction == 1:
+                # 对比中枢之前所有的确认高点，不能超过
+                zs_highs = self.cur_tqn_zs.get("highs", [self.cur_tqn_zs.get('high')])
+                min_high = min(zs_highs)
+                new_high = min(min_high, cur_bi.get('high'))
+
+                # 当前笔的高度为最短，在生长，则更新中枢的结束时间和高度
+                if min_high >= new_high > self.cur_tqn_zs.get('high'):
+                    self.cur_tqn_zs.update({
+                        "end": cur_bi.get('end'),
+                        "high": new_high})
+                    # 更新中枢高度
+                    self.cur_tqn_zs.update({
+                        "height": self.cur_tqn_zs.get('high') - self.cur_tqn_zs.get('low')
+                    })
+            else:
+                # 对比中枢之前所有的确认低点，不能超过
+                zs_lows = self.cur_tqn_zs.get("lows", [self.cur_tqn_zs.get('low')])
+                max_low = max(zs_lows)
+                new_low = max(max_low, cur_bi.get('low'))
+                # 下跌笔在生长，中枢底部在扩展
+                if max_low < new_low < self.cur_tqn_zs.get('low'):
+                    self.cur_tqn_zs.update({
+                        "end": cur_bi.get('end'),
+                        "low": new_low})
+                    # 更新中枢高度
+                    self.cur_tqn_zs.update({
+                        "height": self.cur_tqn_zs.get('high') - self.cur_tqn_zs.get('low')
+                    })
+
+        # 当前笔 不是中枢最后一笔， 方向是回归中枢的
+        else:
+            # 向下的一笔，且回落中枢高位下方，变成中枢的最后一笔
+            if direction == -1 and cur_bi.get('low') < self.cur_tqn_zs.get('high')\
+                    and cur_bi.get('high') > self.cur_tqn_zs.get('low'):
+                # 对比中枢之前所有的确认低点，不能超过
+                zs_lows = self.cur_tqn_zs.get("lows", [self.cur_tqn_zs.get('low')])
+                max_low = max(zs_lows)
+                new_low = max(max_low, cur_bi.get('low'))
+                # 下跌笔在生长，中枢底部在扩展
+                if max_low < new_low < self.cur_tqn_zs.get('low'):
+                    self.cur_tqn_zs.update({
+                        "end": cur_bi.get('end'),
+                        "low": new_low})
+                    # 更新中枢高度
+                    self.cur_tqn_zs.update({
+                        "height": self.cur_tqn_zs.get('high') - self.cur_tqn_zs.get('low')
+                    })
+
+                # 更新中枢的确认高点，更新最后一笔
+                zs_highs = self.cur_tqn_zs.get("highs", [self.cur_tqn_zs.get('high')])
+                zs_highs.append(cur_bi.get('high'))
+                self.cur_tqn_zs.update({
+                    "highs": zs_highs,  # 确认的高点清单（后续不能超过）
+                    "exit_direction": cur_bi.get('direction'),  # 离开笔的方向
+                    "exit_start": cur_bi.get('start')
+                })
+
+                # 最后一笔的时间，若比中枢的结束时间晚，就更新
+                if self.cur_tqn_zs.get('end') < cur_bi.get('start'):
+                    self.cur_tqn_zs.update({"end": cur_bi.get("start")})
+
+            # 向上的一笔，回抽中枢下轨上方，变成中枢的一笔
+            if direction == 1 and cur_bi.get('high') > self.cur_tqn_zs.get('low')\
+                    and cur_bi.get('low') < self.cur_tqn_zs.get('high'):
+                # 对比中枢之前所有的确认高点，不能超过
+                zs_highs = self.cur_tqn_zs.get("highs", [self.cur_tqn_zs.get('high')])
+                min_high = min(zs_highs)
+                new_high = min(min_high, cur_bi.get('high'))
+
+                # 当前笔的高度为最短，在生长，则更新中枢的结束时间和高度
+                if min_high >= new_high > self.cur_tqn_zs.get('high'):
+                    self.cur_tqn_zs.update({
+                        "end": cur_bi.get('end'),
+                        "high": new_high})
+                    # 更新中枢高度
+                    self.cur_tqn_zs.update({
+                        "height": self.cur_tqn_zs.get('high') - self.cur_tqn_zs.get('low')
+                    })
+
+                # 更新中枢的确认低点，更新最后一笔
+                zs_lows = self.cur_tqn_zs.get("lows", [self.cur_tqn_zs.get('low')])
+                zs_lows.append(cur_bi.get('low'))
+                self.cur_tqn_zs.update({
+                    "lows": zs_lows,  # 确认的低点清单（后续不能超过）
+                    "exit_direction": cur_bi.get('direction'),  # 离开笔的方向
+                    "exit_start": cur_bi.get('start')
+                })
+                # 最后一笔的时间，若比中枢的结束时间晚，就更新
+                if self.cur_tqn_zs.get('end') < cur_bi.get('start'):
+                    self.cur_tqn_zs.update({"end": cur_bi.get("start")})
+
+    def export_tqn_zs(self):
+        """
+        输出唐其安中枢 =》 csv文件
+        :return:
+        """
+        if self.export_zs_filename is None:
+            return
+
+        if len(self.cur_tqn_zs) < 1:
+            return
+
+        # 将当前中枢的信息写入
+        self.append_data(file_name=self.export_zs_filename,
+                         dict_data=self.cur_tqn_zs,
+                         field_names=["start", "end", "direction", "height", "high", "low"]
+                         )
+
+    def is_trend_end(self, direction):
+        """
+        是否趋势被终结(
+        :param direction:
+        :return:
+        """
+        pass
 
     def get_sar(self, direction, cur_sar, cur_af=0, sar_limit=0.2, sar_step=0.02):
         """
@@ -1458,7 +1928,7 @@ class CtaLineBar(object):
             if self.low_array[-1] < self.low_array[-2]:
                 af = cur_af + min(sar_step, sar_limit - cur_af)
             else:
-                #af = sar_step
+                # af = sar_step
                 af = cur_af
 
             ep = self.low_array[-1]
@@ -1693,12 +2163,16 @@ class CtaLineBar(object):
             if self.ma12_count <= 0:
                 if golden_cross:
                     self.ma12_count = 1
+                    self.ma12_cross = round((self.line_ma1[-1] + self.line_ma2[-1]) / 2, self.round_n)
+                    self.ma12_cross_price = self.cur_price
                 elif self.line_ma1[-1] < self.line_ma2[-1]:
                     self.ma12_count -= 1
 
             elif self.ma12_count >= 0:
                 if dead_cross:
                     self.ma12_count = -1
+                    self.ma12_cross = round((self.line_ma1[-1] + self.line_ma2[-1]) / 2, self.round_n)
+                    self.ma12_cross_price = self.cur_price
                 elif self.line_ma1[-1] > self.line_ma2[-1]:
                     self.ma12_count += 1
 
@@ -1718,12 +2192,16 @@ class CtaLineBar(object):
             if self.ma23_count <= 0:
                 if golden_cross:
                     self.ma23_count = 1
+                    self.ma23_cross = round((self.line_ma2[-1] + self.line_ma3[-1]) / 2, self.round_n)
+                    self.ma23_cross_price = self.cur_price
                 elif self.line_ma2[-1] < self.line_ma3[-1]:
                     self.ma23_count -= 1
 
             elif self.ma23_count >= 0:
                 if dead_cross:
                     self.ma23_count = -1
+                    self.ma23_cross = round((self.line_ma2[-1] + self.line_ma3[-1]) / 2, self.round_n)
+                    self.ma23_cross_price = self.cur_price
                 elif self.line_ma2[-1] > self.line_ma3[-1]:
                     self.ma23_count += 1
 
@@ -1743,12 +2221,16 @@ class CtaLineBar(object):
             if self.ma13_count <= 0:
                 if golden_cross:
                     self.ma13_count = 1
+                    self.ma13_cross = round((self.line_ma1[-1] + self.line_ma3[-1]) / 2, self.round_n)
+                    self.ma13_cross_price = self.cur_price
                 elif self.line_ma1[-1] < self.line_ma3[-1]:
                     self.ma13_count -= 1
 
             elif self.ma13_count >= 0:
                 if dead_cross:
                     self.ma13_count = -1
+                    self.ma13_cross = round((self.line_ma1[-1] + self.line_ma3[-1]) / 2, self.round_n)
+                    self.ma13_cross_price = self.cur_price
                 elif self.line_ma1[-1] > self.line_ma3[-1]:
                     self.ma13_count += 1
 
@@ -1835,6 +2317,70 @@ class CtaLineBar(object):
         if self._rt_ma3_atan is None and len(self.line_ma3_atan) > 0:
             return self.line_ma3_atan[-1]
         return self._rt_ma3_atan
+
+    def get_effect_rate(self, bar_len):
+        """
+        获取效率系数
+        （最后一日收盘价-首日收盘价）/sum（abs（每日收盘价-前一日收盘价））
+        """
+        if bar_len > self.bar_len:
+            bar_len = self.bar_len
+        if bar_len < 2:
+            return np.nan
+        # 整个周期价格的总体变动:=abs(close-ref(close,n));
+        dir = self.close_array[-1] - self.close_array[-bar_len - 1]
+        vir = 0
+
+        for i in range(1, bar_len + 1):  # 周期 para_ama_len
+            v1 = abs(self.close_array[-i - 1] - self.close_array[-i])
+            vir = vir + v1
+
+        # 百分比
+        er = round(float(dir) / vir, self.round_n) * 100
+
+        return er
+
+    def __count_ama(self):
+        """计算K线的卡夫曼自适应AMA1
+        如何测量价格变动的速率。
+    采用的方法是，在一定的周期内，计算每个周期价格的变动的累加，用整个周期的总体价格变动除以每个周期价格变动的累加，我们采用这个数字作为价格变化的速率。如果股票持续上涨或下跌，那么变动的速率就是1；如果股票在一定周期内涨跌的幅度为0，那么价格的变动速率就是0。变动速率为1，对应的最快速的均线－2日的EMA；变动速率为0 ，则对应最慢速的均线－30日EMA。
+    以通达信软件的公式为例（其他软件也可以用）：
+    每个周期价格变动的累加:=sum(abs(close-ref(close,1)),n);
+    整个周期价格的总体变动:=abs(close-ref(close,n));
+    变动速率:=整个周期价格的总体变动/每个周期价格变动的累加;
+    在本文中，一般采用周期n=10。
+    ·使用10周期去指定一个从非常慢到非常快的趋势；
+    ·在10周期内当价格方向不明确的时候，自适应均线应该是横向移动；
+        """
+
+        if self.para_ama_len <= 0:
+            return
+
+        # 1、lineBar满足长度才执行计算
+        if len(self.line_bar) < self.para_ama_len + 2:
+            self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算AMA需要：{1}'.
+                           format(len(self.line_bar), self.para_ama_len))
+            return
+
+        # 3、para_ema1_len(包含当前周期）的自适应均线 [-self.para_ama_len+2:]
+        self.cur_ama = ta.KAMA(self.close_array, self.para_ama_len)[-1]
+        self.cur_ama = round(float(self.cur_ama), self.round_n)
+
+        # 删除多余的数据
+        if len(self.line_ama) > self.max_hold_bars:
+            del self.line_ama[0]
+
+        # 添加新数据
+        if not np.isnan(self.cur_ama):
+            self.line_ama.append(self.cur_ama)
+
+        self.cur_er = self.get_effect_rate(self.para_ama_len)
+
+        if len(self.line_ama_er) > self.max_hold_bars:
+            del self.line_ama_er[0]
+
+        if not np.isnan(self.cur_er):
+            self.line_ama_er.append(self.cur_er)
 
     def __count_ema(self):
         """计算K线的EMA1 和EMA2"""
@@ -2178,7 +2724,8 @@ class CtaLineBar(object):
         if len(self.line_bar) > 0:
             # 判断是否为大单
             is_big_order = False
-            outstanding_capitals = self.para_outstanding_capitals * 10000 * 10000 * self.line_bar[-1].close_price  # 流通市值
+            outstanding_capitals = self.para_outstanding_capitals * 10000 * 10000 * self.line_bar[
+                -1].close_price  # 流通市值
             if outstanding_capitals > 200 * 100000000:
                 # 成交额比例
                 volume_ratio = self.line_bar[-1].volume * self.line_bar[-1].close_price / 100 / 160
@@ -2373,12 +2920,13 @@ class CtaLineBar(object):
                 # 不包含当前最新的Bar
                 try:
                     upper_list, middle_list, lower_list = ta.BBANDS(self.close_array,
-                                                                timeperiod=boll_len, nbdevup=self.para_boll_std_rate,
-                                                                nbdevdn=self.para_boll_std_rate, matype=0)
+                                                                    timeperiod=boll_len,
+                                                                    nbdevup=self.para_boll_std_rate,
+                                                                    nbdevdn=self.para_boll_std_rate, matype=0)
                 except Exception as ex:
                     self.write_log(f'计算布林异常:{str(ex)}')
                     self.write_log(''.format(self.close_array[-boll_len:]))
-                    print(f'计算布林异常:{str(ex)}',file=sys.stderr)
+                    print(f'计算布林异常:{str(ex)}', file=sys.stderr)
                     return
 
                 if np.isnan(upper_list[-1]):
@@ -2815,7 +3363,7 @@ class CtaLineBar(object):
         if len(self.line_k) > 0:
             lastK = self.line_k[-1]
             if np.isnan(lastK):
-                lastK  = 0
+                lastK = 0
         else:
             lastK = 0
 
@@ -2901,7 +3449,6 @@ class CtaLineBar(object):
         self.line_j_ema1.append(j_ema1)
         self.line_j_ema2.append(j_ema2)
 
-
     def rt_count_kdj(self):
         """
         (实时）Kdj计算方法：
@@ -2936,7 +3483,7 @@ class CtaLineBar(object):
         if len(self.line_k) > 0:
             lastK = self.line_k[-1]
             if np.isnan(lastK):
-                lastK  = 0
+                lastK = 0
         else:
             lastK = 0
 
@@ -3187,7 +3734,7 @@ class CtaLineBar(object):
         # maxLen = maxLen * 3  # 注：数据长度需要足够，才能准确。测试过，3倍长度才可以与国内的文华等软件一致
 
         if self.bar_len - 1 < maxLen:
-            #self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算MACD需要：{1}'.format(self.bar_len - 1, maxLen))
+            # self.write_log(u'数据未充分,当前Bar数据数量：{0}，计算MACD需要：{1}'.format(self.bar_len - 1, maxLen))
             return
 
         dif_list, dea_list, macd_list = ta.MACD(self.close_array, fastperiod=self.para_macd_fast_len,
@@ -3373,7 +3920,7 @@ class CtaLineBar(object):
             return False
         s1, s2 = None, None  # s1,倒数的一个匹配段；s2，倒数第二个匹配段
         for idx in range(seg_lens):
-            seg = self.macd_segment_list[-idx-1]
+            seg = self.macd_segment_list[-idx - 1]
             if direction == Direction.LONG:
                 if seg.get('macd_count', 0) > 0:
                     if s1 is None:
@@ -3395,11 +3942,17 @@ class CtaLineBar(object):
             return False
 
         if direction == Direction.LONG:
+            s1_macd_counts = s1.get('macd_count', 1)
+            s2_macd_counts = s2.get('macd_count', 1)
             s1_max_price = s1.get('max_price', None)
             s2_max_price = s2.get('max_price', None)
             s1_dif_max = s1.get('max_dif', None)
             s2_dif_max = s2.get('max_dif', None)
             if s1_max_price is None or s2_max_price is None or s1_dif_max is None and s2_dif_max is None:
+                return False
+
+            # 上升段，累计的bar数量，不能低于6
+            if s1_macd_counts < 6 or s2_macd_counts < 6:
                 return False
 
             # 顶背离，只能在零轴上方才判断
@@ -3411,11 +3964,17 @@ class CtaLineBar(object):
                 return True
 
         if direction == Direction.SHORT:
+            s1_macd_counts = s1.get('macd_count', 1)
+            s2_macd_counts = s2.get('macd_count', 1)
             s1_min_price = s1.get('min_price', None)
             s2_min_price = s2.get('min_price', None)
             s1_dif_min = s1.get('min_dif', None)
             s2_dif_min = s2.get('min_dif', None)
             if s1_min_price is None or s2_min_price is None or s1_dif_min is None and s2_dif_min is None:
+                return False
+
+            # 每个下跌段，累计的bar数量，不能低于6
+            if abs(s1_macd_counts) < 6 or abs(s2_macd_counts) < 6:
                 return False
 
             # 底部背离，只能在零轴下方才判断
@@ -3438,7 +3997,7 @@ class CtaLineBar(object):
             return False
         s1, s2 = None, None  # s1,倒数的一个匹配段；s2，倒数第二个匹配段
         for idx in range(seg_lens):
-            seg = self.macd_segment_list[-idx-1]
+            seg = self.macd_segment_list[-idx - 1]
             if direction == Direction.LONG:
                 if seg.get('macd_count', 0) > 0:
                     if s1 is None:
@@ -3460,25 +4019,33 @@ class CtaLineBar(object):
             return False
 
         if direction == Direction.LONG:
+            s1_macd_counts = s1.get('macd_count', 1)
+            s2_macd_counts = s2.get('macd_count', 1)
             s1_max_price = s1.get('max_price', None)
             s2_max_price = s2.get('max_price', None)
             s1_area = s1.get('macd_area', None)
             s2_area = s2.get('macd_area', None)
             if s1_max_price is None or s2_max_price is None or s1_area is None and s2_area is None:
                 return False
-
+            # 上升段，累计的bar数量，不能低于6
+            if s1_macd_counts < 6 or s2_macd_counts < 6:
+                return False
             # 价格创新高（超过前高得0.99）；MACD能量柱没有创更大面积
             if s1_max_price >= s2_max_price * 0.99 and s1_area < s2_area:
                 return True
 
         if direction == Direction.SHORT:
+            s1_macd_counts = s1.get('macd_count', 1)
+            s2_macd_counts = s2.get('macd_count', 1)
             s1_min_price = s1.get('min_price', None)
             s2_min_price = s2.get('min_price', None)
             s1_area = s1.get('macd_area', None)
             s2_area = s2.get('macd_area', None)
             if s1_min_price is None or s2_min_price is None or s1_area is None and s2_area is None:
                 return False
-
+            # 每个下跌段，累计的bar数量，不能低于6
+            if abs(s1_macd_counts) < 6 or abs(s2_macd_counts) < 6:
+                return False
             # 价格创新低，MACD能量柱没有创更大面积
             if s1_min_price <= s2_min_price * 1.01 and s1_area < s2_area:
                 return True
@@ -3547,7 +4114,6 @@ class CtaLineBar(object):
             del self.line_cci_ema[0]
         self.line_cci_ema.append(self.cur_cci_ema)
 
-
     def rt_count_cci(self):
         """实时计算CCI值"""
         if self.para_cci_len <= 0:
@@ -3561,7 +4127,7 @@ class CtaLineBar(object):
 
         HIGH = np.append(self.high_array[-2 * self.para_cci_len:], [self.line_bar[-1].high_price])
         LOW = np.append(self.low_array[-2 * self.para_cci_len:], [self.line_bar[-1].low_price])
-        CLOSE = np.append(self.close_array[-2 * self.para_cci_len:],[self.line_bar[-1].close_price])
+        CLOSE = np.append(self.close_array[-2 * self.para_cci_len:], [self.line_bar[-1].close_price])
         TP = (HIGH + LOW + CLOSE) / 3
         TP = TP[-self.para_cci_len:]
         MA = np.mean(TP)
@@ -3571,7 +4137,6 @@ class CtaLineBar(object):
         self._rt_cci = CCI
         rt_line_cci = np.append(self.line_cci[-30:], [CCI])
         self._rt_cci_ema = self.__ema(self.__ema(self.__ema(rt_line_cci, 3), 2), 2)[-1]
-
 
     @property
     def rt_cci(self):
@@ -3635,11 +4200,11 @@ class CtaLineBar(object):
         if len(self.line_state_mean2) == 0 or len(self.line_state_covar2) == 0:
             try:
                 self.kf2 = KalmanFilter(transition_matrices=[1],
-                                       observation_matrices=[1],
-                                       initial_state_mean=self.close_array[-1],
-                                       initial_state_covariance=1,
-                                       transition_covariance=0.01,
-                                       observation_covariance=self.para_kf2_obscov_len)
+                                        observation_matrices=[1],
+                                        initial_state_mean=self.close_array[-1],
+                                        initial_state_covariance=1,
+                                        transition_covariance=0.01,
+                                        observation_covariance=self.para_kf2_obscov_len)
             except Exception:
                 self.write_log(u'导入卡尔曼过滤器失败,需先安装 pip install pykalman')
                 self.para_active_kf2 = False
@@ -3653,8 +4218,8 @@ class CtaLineBar(object):
             c = self.line_state_covar2[-1]
 
             state_means, state_covariances = self.kf2.filter_update(filtered_state_mean=m,
-                                                                   filtered_state_covariance=c,
-                                                                   observation=self.close_array[-1])
+                                                                    filtered_state_covariance=c,
+                                                                    observation=self.close_array[-1])
             m = state_means[-1].item()
             c = state_covariances[-1].item()
         self.line_state_mean2.append(m)
@@ -4225,7 +4790,7 @@ class CtaLineBar(object):
         检查SDK的方向风险
         :return:
         """
-        if not self.para_active_skd or len(self.line_sk) < 2 :
+        if not self.para_active_skd or len(self.line_sk) < 2:
             return False
 
         if runtime:
@@ -4246,18 +4811,18 @@ class CtaLineBar(object):
     def rt_skd_dead_cross(self):
         """是否实时SKD死叉"""
         ret = self.is_skd_high_dead_cross(runtime=True, high_skd=15) and \
-                                      self.cur_skd_count > 0 and \
-                                      self.rt_skd_cross_price > 0 and \
-                                      self.cur_price <= self.rt_skd_cross_price
+              self.cur_skd_count > 0 and \
+              self.rt_skd_cross_price > 0 and \
+              self.cur_price <= self.rt_skd_cross_price
         return ret
 
     @property
     def rt_skd_golden_cross(self):
         """是否实时SKD金叉"""
         ret = self.is_skd_low_golden_cross(runtime=True, low_skd=85) and \
-                      self.cur_skd_count < 0 and \
-                      self.rt_skd_cross_price > 0 and \
-                      self.cur_price >= self.rt_skd_cross_price
+              self.cur_skd_count < 0 and \
+              self.rt_skd_cross_price > 0 and \
+              self.cur_price >= self.rt_skd_cross_price
         return ret
 
     def is_skd_high_dead_cross(self, runtime=False, high_skd=None):
@@ -4665,10 +5230,10 @@ class CtaLineBar(object):
 
         ## 检查是否有不合理的std
         var4_mask = var4 < 1e-5  # 找出不合理的std
-        var4[var4_mask] = 1e-5   # 用一个小的正数替换
+        var4[var4_mask] = 1e-5  # 用一个小的正数替换
         var5 = ((var2 - var3) / var4 * 100 + 200) / 4  # 计算var5
-        var5[var4_mask] = 0      # 把不合理的std计算的结果抹掉，用0填充
-                                 # 因为var2-var3是一种类似乖离率的东西，长期均值是接近0的，所以用0填充有合理性
+        var5[var4_mask] = 0  # 把不合理的std计算的结果抹掉，用0填充
+        # 因为var2-var3是一种类似乖离率的东西，长期均值是接近0的，所以用0填充有合理性
 
         var6 = (self.__ema(var5, 5) - 25) * 1.56
         fast_array = self.__ema(var6, 2) * 1.22
@@ -4699,10 +5264,10 @@ class CtaLineBar(object):
             # 不计算
             return
 
-        var2 = self.close_array[self.close_array>0]
+        var2 = self.close_array[self.close_array > 0]
         if len(var2) < (5 * self.para_bd_len):
             return
-        bar_mid4 = (self.line_bar[-1].close_price * 2 + self.line_bar[-1].high_price + self.line_bar[-1].low_price)/4
+        bar_mid4 = (self.line_bar[-1].close_price * 2 + self.line_bar[-1].high_price + self.line_bar[-1].low_price) / 4
         bar_mid4 = round(bar_mid4, self.round_n)
 
         mid4_array = np.append(self.mid4_array, [bar_mid4])
@@ -4735,7 +5300,6 @@ class CtaLineBar(object):
             return self.line_bd_slow[-1]
         return self._bd_slow
 
-
     def __count_skdj(self):
         """计算波段快/慢线"""
         #
@@ -4752,7 +5316,7 @@ class CtaLineBar(object):
         LOWV = pd.Series(data=self.low_array).rolling(window=NN).min().values
         HIGHV = pd.Series(data=self.high_array).rolling(window=NN).max().values
         CLOSE = self.close_array
-        RSV = self.__ema((CLOSE-LOWV)/(HIGHV-LOWV)*100, MM)
+        RSV = self.__ema((CLOSE - LOWV) / (HIGHV - LOWV) * 100, MM)
         K = self.__ema(RSV, MM)
         D = pd.Series(data=K).rolling(window=MM).mean().values
 
@@ -4783,14 +5347,14 @@ class CtaLineBar(object):
             del self.chan_graph
             self.chan_graph = None
         self.chan_graph = ChanGraph(chan_lib=self.chan_lib,
-                                    index=self.index_list[-self.bar_len+1:],
-                                    high=self.high_array[-self.bar_len+1:],
-                                    low=self.low_array[-self.bar_len+1:])
+                                    index=self.index_list[-self.bar_len + 1:],
+                                    high=self.high_array[-self.bar_len + 1:],
+                                    low=self.low_array[-self.bar_len + 1:])
         self._fenxing_list = self.chan_graph.fenxing_list
         self._bi_list = self.chan_graph.bi_list
         self._bi_zs_list = self.chan_graph.bi_zhongshu_list
         self._duan_list = self.chan_graph.duan_list
-        #self._duan_zs_list = self.chan_graph.duan_zhongshu_list
+        # self._duan_zs_list = self.chan_graph.duan_zhongshu_list
 
         self.chanlun_calculated = True
 
@@ -4824,56 +5388,62 @@ class CtaLineBar(object):
     #         self.__count_chanlun()
     #     return self._duan_zs_list
 
-    def is_bi_beichi_inside_duan(self, direction):
-        """当前段内的笔，是否形成背驰"""
-        if len(self._duan_list) == 0:
-            return False
-
+    def is_bi_beichi_inside_duan(self, direction, cur_duan=None):
+        """
+        当前段内的笔，是否形成背驰
+        :param direction:
+        :param cur_duan: 指定某一线段
+        :return:
+        """
         # Direction => int
         if isinstance(direction, Direction):
             direction = 1 if direction == Direction.LONG else -1
 
-        # 分型需要确认
-        if self.fenxing_list[-1].is_rt:
-            return False
+        if cur_duan is None:
+            if len(self._duan_list) == 0:
+                return False
 
-        # 当前段
-        duan = self._duan_list[-1]
-        if duan.direction != direction:
+            # 分型需要确认
+            if self.fenxing_list[-1].is_rt:
+                return False
+
+            # 取当前段
+            cur_duan = self._duan_list[-1]
+            # 获取最近2个匹配direction的分型
+            fx_list = [fx for fx in self._fenxing_list[-4:] if fx.direction == direction]
+            if len(fx_list) != 2:
+                return False
+
+            # 这里是排除段的信号出错，获取了很久之前的一段，而不是最新的一段
+            if cur_duan.end < fx_list[0].index:
+                return False
+
+        if cur_duan.direction != direction:
             return False
 
         # 当前段包含的分笔，必须大于等于5(缠论里面，如果只有三个分笔，背驰的力度比较弱）
-        if len(duan.bi_list) < 5:
-            return False
-
-        # 获取最近2个匹配direction的分型
-        fx_list = [fx for fx in self._fenxing_list[-4:] if fx.direction == direction]
-        if len(fx_list) != 2:
-            return False
-
-        # 这里是排除段的信号出错，获取了很久之前的一段，而不是最新的一段
-        if duan.end < fx_list[0].index:
+        if len(cur_duan.bi_list) < 5:
             return False
 
         # 分笔与段同向
-        if duan.bi_list[-1].direction != direction \
-                or duan.bi_list[-3].direction != direction \
-                or duan.bi_list[-5].direction != direction:
+        if cur_duan.bi_list[-1].direction != direction \
+                or cur_duan.bi_list[-3].direction != direction \
+                or cur_duan.bi_list[-5].direction != direction:
             return False
 
         # 背驰: 同向分笔，逐笔提升，最后一笔，比上一同向笔，短,斜率也比上一同向笔小
         if direction == 1:
-            if duan.bi_list[-1].low > duan.bi_list[-3].low > duan.bi_list[-5].low \
-                and duan.bi_list[-1].low > duan.bi_list[-5].high \
-                and duan.bi_list[-1].height < duan.bi_list[-3].height \
-                and duan.bi_list[-1].atan < duan.bi_list[-3].atan:
+            if cur_duan.bi_list[-1].low > cur_duan.bi_list[-3].low > cur_duan.bi_list[-5].low \
+                    and cur_duan.bi_list[-1].low > cur_duan.bi_list[-5].high \
+                    and cur_duan.bi_list[-1].height < cur_duan.bi_list[-3].height \
+                    and cur_duan.bi_list[-1].atan < cur_duan.bi_list[-3].atan:
                 return True
 
         if direction == -1:
-            if duan.bi_list[-1].high < duan.bi_list[-3].high < duan.bi_list[-5].high \
-                and duan.bi_list[-1].high < duan.bi_list[-5].low \
-                    and duan.bi_list[-1].height < duan.bi_list[-3].height\
-                    and duan.bi_list[-1].atan < duan.bi_list[-3].atan:
+            if cur_duan.bi_list[-1].high < cur_duan.bi_list[-3].high < cur_duan.bi_list[-5].high \
+                    and cur_duan.bi_list[-1].high < cur_duan.bi_list[-5].low \
+                    and cur_duan.bi_list[-1].height < cur_duan.bi_list[-3].height \
+                    and cur_duan.bi_list[-1].atan < cur_duan.bi_list[-3].atan:
                 return True
 
         return False
@@ -4887,6 +5457,8 @@ class CtaLineBar(object):
         """
         if isinstance(direction, Direction):
             direction = 1 if direction == Direction.LONG else -1
+        if len(self._duan_list) == 0:
+            return False
         # 当前段
         duan = self._duan_list[-1]
 
@@ -5018,7 +5590,7 @@ class CtaLineBar(object):
 
         return False
 
-    def is_zs_beichi_inside_duan(self, direction):
+    def is_zs_beichi_inside_duan(self, direction, cur_duan=None):
         """是否中枢盘整背驰，进入笔、离去笔，高度，能量背驰"""
 
         # Direction => int
@@ -5028,16 +5600,23 @@ class CtaLineBar(object):
         # 具备中枢
         if len(self.bi_zs_list) < 1:
             return False
-        # 具备段
-        if len(self.duan_list) < 1:
-            return False
-        # 最后线段
-        cur_duan = self.duan_list[-1]
-        if cur_duan.direction != direction:
-            return False
 
-        # 线段内的笔中枢（取前三个就可以了）
-        zs_list_inside_duan = [zs for zs in self.bi_zs_list[-3:] if zs.start >= cur_duan.start]
+        if cur_duan is None:
+            # 具备段
+            if len(self.duan_list) < 1:
+                return False
+            # 最后线段
+            cur_duan = self.duan_list[-1]
+            if cur_duan.direction != direction:
+                return False
+
+            # 分型需要确认
+            if self.fenxing_list[-1].is_rt:
+                return False
+
+        # 线段内的笔中枢（取前10个就可以了）
+        zs_list_inside_duan = [zs for zs in self.bi_zs_list[-10:] if
+                               zs.start >= cur_duan.start and zs.end <= cur_duan.end]
 
         # 无中枢，或者超过1个中枢，都不符合中枢背驰
         if len(zs_list_inside_duan) != 1:
@@ -5049,28 +5628,24 @@ class CtaLineBar(object):
         if cur_duan.bi_list[-1].end != cur_zs.bi_list[-1].end:
             return False
 
-        # 分型需要确认
-        if self.fenxing_list[-1].is_rt:
-            return False
-
         # 找出中枢得进入笔
         entry_bi = cur_zs.bi_list[0]
         if entry_bi.direction != direction:
             # 找出中枢之前，与段同向得笔
-            before_bi_list = [bi for bi in cur_duan.bi_list if bi.start < entry_bi.start and bi.direction==direction]
+            before_bi_list = [bi for bi in cur_duan.bi_list if bi.start < entry_bi.start and bi.direction == direction]
             # 中枢之前得同向笔，不存在（一般不可能，因为中枢得第一笔不同向，该中枢存在与段中间)
             if len(before_bi_list) == 0:
                 return False
             entry_bi = before_bi_list[-1]
 
         # 中枢第一笔，与最后一笔，比较力度和能量
-        if entry_bi.height > cur_zs.bi_list[-1].height\
-            and entry_bi.atan > cur_zs.bi_list[-1].atan:
+        if entry_bi.height > cur_zs.bi_list[-1].height \
+                and entry_bi.atan > cur_zs.bi_list[-1].atan:
             return True
 
         return False
 
-    def is_zs_fangda(self, cur_bi_zs = None, start=False, last_bi=False):
+    def is_zs_fangda(self, cur_bi_zs=None, start=False, last_bi=False):
         """
         判断中枢，是否为放大型中枢。
         中枢放大，一般是反向力量的强烈试探导致；
@@ -5132,10 +5707,11 @@ class CtaLineBar(object):
 
         return False
 
-    def is_zoushi_beichi(self, direction):
+    def is_zoushi_beichi(self, direction, cur_duan=None):
         """
         判断是否走势背驰
-        :param direction:
+        :param direction: 走势方向
+        :param cur_duan: 走势线段，
         :return:
         """
         # Direction => int
@@ -5145,16 +5721,26 @@ class CtaLineBar(object):
         # 具备中枢
         if len(self.bi_zs_list) < 1:
             return False
-        # 具备段
-        if len(self.duan_list) < 1:
-            return False
-        # 最后线段
-        cur_duan = self.duan_list[-1]
+        if cur_duan is None:
+            # 具备段
+            if len(self.duan_list) < 1:
+                return False
+
+            # 最后线段
+            cur_duan = self.duan_list[-1]
+
+            # 判断分型
+            fx_list = [fx for fx in self.fenxing_list[-4:] if fx.direction == direction]
+            if len(fx_list) > 0:
+                if fx_list[-1].is_rt:
+                    return False
+
         if cur_duan.direction != direction:
             return False
 
-        # 线段内的笔中枢（取前三个就可以了）
-        zs_list_inside_duan = [zs for zs in self.bi_zs_list[-3:] if zs.start >= cur_duan.start]
+        # 线段内的笔中枢（取前10个就可以了）
+        zs_list_inside_duan = [zs for zs in self.bi_zs_list[-10:] if
+                               zs.start >= cur_duan.start and zs.end <= cur_duan.end]
 
         # 少于2个中枢，都不符合走势背驰
         if len(zs_list_inside_duan) < 2:
@@ -5163,14 +5749,15 @@ class CtaLineBar(object):
         cur_zs = zs_list_inside_duan[-1]
         # 上一个中枢
         pre_zs = zs_list_inside_duan[-2]
-        bi_list_between_zs = [bi for bi in cur_duan.bi_list if bi.direction == direction and bi.end > pre_zs.end and bi.start < cur_zs.start]
-        if len(bi_list_between_zs) ==0:
+        bi_list_between_zs = [bi for bi in cur_duan.bi_list if
+                              bi.direction == direction and bi.end > pre_zs.end and bi.start < cur_zs.start]
+        if len(bi_list_between_zs) == 0:
             return False
 
         # 最后一笔，作为2个中枢间的笔
         bi_between_zs = bi_list_between_zs[-1]
 
-        bi_list_after_cur_zs = [bi for bi in cur_duan.bi_list if bi.direction==direction and bi.end > cur_zs.end]
+        bi_list_after_cur_zs = [bi for bi in cur_duan.bi_list if bi.direction == direction and bi.end > cur_zs.end]
         if len(bi_list_after_cur_zs) == 0:
             return False
 
@@ -5185,10 +5772,6 @@ class CtaLineBar(object):
         if bi_leave_cur_zs.start != self.bi_list[-1].start:
             return False
 
-        fx = [fx for fx in self.fenxing_list[-2:] if fx.direction==direction][-1]
-        if fx.is_rt:
-           return False
-
         # 中枢间的分笔，能量大于最后分笔，形成走势背驰
         if bi_between_zs.height > bi_leave_cur_zs.height and bi_between_zs.atan > bi_leave_cur_zs.atan:
             return True
@@ -5198,7 +5781,6 @@ class CtaLineBar(object):
     def write_log(self, content):
         """记录CTA日志"""
         self.strategy.write_log(u'[' + self.name + u']' + content)
-
 
     def append_data(self, file_name, dict_data, field_names=None):
         """
@@ -5220,7 +5802,8 @@ class CtaLineBar(object):
             if not os.path.exists(file_name):
                 self.write_log(u'create csv file:{}'.format(file_name))
                 with open(file_name, 'a', encoding='utf8', newline='') as csvWriteFile:
-                    writer = csv.DictWriter(f=csvWriteFile, fieldnames=dict_fieldnames, dialect='excel')
+                    writer = csv.DictWriter(f=csvWriteFile, fieldnames=dict_fieldnames, dialect='excel',
+                                            extrasaction='ignore')
                     self.write_log(u'write csv header:{}'.format(dict_fieldnames))
                     writer.writeheader()
                     writer.writerow(dict_data)
@@ -5949,7 +6532,8 @@ class CtaMinuteBar(CtaLineBar):
         if self.is_7x24:
 
             if (
-                    (tick.datetime.hour * 60 + tick.datetime.minute) % self.bar_interval == 0 and tick.datetime.minute != lastBar.datetime.minute) or (
+                    (
+                            tick.datetime.hour * 60 + tick.datetime.minute) % self.bar_interval == 0 and tick.datetime.minute != lastBar.datetime.minute) or (
                     tick.datetime - lastBar.datetime).total_seconds() > self.bar_interval * 60:
                 # self.write_log('{} drawLineBar() new_bar,{} lastbar:{}, bars_count={}'
                 #                 .format(self.name, tick.datetime, lastBar.datetime,

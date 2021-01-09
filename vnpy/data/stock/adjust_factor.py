@@ -24,7 +24,16 @@ import baostock as bs
 import pandas as pd
 
 ADJUST_FACTOR_FILE = 'stock_adjust_factor.pkb2'
-
+# 格式： {vt_symbol: [{dict},{dict}]
+#d = {
+#  'exchange': exchange.value,  # 证券交易所
+#  'code': stock_code,  # 证券代码
+#  'name': stock_name,  # 证券中文名称
+#  'dividOperateDate': row[1],  # 除权除息日期
+#  'foreAdjustFactor': float(row[2]),  # 向前复权因子 除权除息日前一个交易日的收盘价/除权除息日最近的一个交易日的前收盘价
+#  'backAdjustFactor': float(row[3]),  # 向后复权因子 除权除息日最近的一个交易日的前收盘价/除权除息日前一个交易日的收盘价
+#  'adjustFactor': float(row[4])  # 本次复权因子
+#   }
 
 def get_all_adjust_factor():
     """ 获取所有股票复权因子"""

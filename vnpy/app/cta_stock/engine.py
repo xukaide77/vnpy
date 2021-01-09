@@ -279,6 +279,7 @@ class CtaEngine(BaseEngine):
 
         strategy = self.orderid_strategy_map.get(order.vt_orderid, None)
         if not strategy:
+            self.write_log(f'委托单没有对应的策略设置:order:{order}')
             return
 
         # Remove vt_orderid if order is no longer active.
@@ -310,11 +311,13 @@ class CtaEngine(BaseEngine):
 
         # Filter duplicate trade push
         if trade.vt_tradeid in self.vt_tradeids:
+            self.write_log(f'成交单的委托编号不属于本引擎实例:{trade}')
             return
         self.vt_tradeids.add(trade.vt_tradeid)
 
         strategy = self.orderid_strategy_map.get(trade.vt_orderid, None)
         if not strategy:
+            self.write_log(f'成交单没有对应的策略设置:order:{trade}')
             return
 
         # Update strategy pos before calling on_trade method

@@ -312,14 +312,18 @@ class TdxStockData(object):
 
             if return_bar:
                 self.write_log('dataframe => [BarData]')
+                exchange = TDX_VN_STOCK_MARKET_MAP.get(market_id, Exchange.LOCAL)
                 for index, row in data.iterrows():
-                    add_bar = BarData()
                     try:
-                        add_bar.symbol = symbol
-                        add_bar.datetime = index
+                        add_bar = BarData(
+                        gateway_name='tdx',
+                        symbol=symbol,
+                        exchange=exchange,
+                        datetime=index
+                        )
                         add_bar.date = row['date']
                         add_bar.time = row['time']
-                        add_bar.trading_date = row['trading_date']
+                        add_bar.trading_day = row['trading_date']
                         add_bar.open_price = float(row['open'])
                         add_bar.high_price = float(row['high'])
                         add_bar.low_price = float(row['low'])

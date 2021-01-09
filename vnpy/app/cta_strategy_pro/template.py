@@ -304,6 +304,7 @@ class CtaTemplate(ABC):
             vt_symbol = self.vt_symbol
 
         if not self.trading:
+            self.write_log(f'非交易状态')
             return []
 
         vt_orderids = self.cta_engine.send_order(
@@ -317,6 +318,11 @@ class CtaTemplate(ABC):
             lock=lock,
             order_type=order_type
         )
+        if len(vt_orderids) == 0:
+            self.write_error(f'{self.strategy_name}调用cta_engine.send_order委托返回失败,vt_symbol:{vt_symbol}')
+                             # f',direction:{direction.value},offset:{offset.value},'
+                             # f'price:{price},volume:{volume},stop:{stop},lock:{lock},'
+                             # f'order_type:{order_type}')
 
         if order_time is None:
             order_time = datetime.now()
@@ -641,8 +647,6 @@ class CtaProTemplate(CtaTemplate):
         if self.idx_symbol is None:
             self.idx_symbol = get_underlying_symbol(symbol).upper() + '99.' + self.exchange.value
 
-        self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=self.idx_symbol)
-
         if self.vt_symbol != self.idx_symbol:
             self.write_log(f'指数合约:{self.idx_symbol}, 主力合约:{self.vt_symbol}')
         self.price_tick = self.cta_engine.get_price_tick(self.vt_symbol)
@@ -753,6 +757,7 @@ class CtaProTemplate(CtaTemplate):
         """
         self.write_log(u'init_position(),初始化持仓')
         pos_symbols = set()
+        remove_ids = []
         if len(self.gt.up_grids) <= 0:
             self.position.short_pos = 0
             # 加载已开仓的空单数据，网格JSON
@@ -770,6 +775,14 @@ class CtaProTemplate(CtaTemplate):
                         sg.order_ids = []
 
                     short_symbol = sg.snapshot.get('mi_symbol', self.vt_symbol)
+                    if sg.traded_volume > 0:
+                        if sg.open_status and sg.volume== sg.traded_volume:
+                            msg = f'{self.strategy_name} {short_symbol}空单持仓{sg.volume},已成交:{sg.traded_volume}，不加载'
+                            self.write_log(msg)
+                            self.send_wechat(msg)
+                            remove_ids.append(sg.id)
+                            continue
+
                     pos_symbols.add(short_symbol)
                     self.write_log(u'加载持仓空单[ID:{},vt_symbol:{},价格:{}],[指数:{},价格：{}],数量:{}手'
                                    .format(sg.id, short_symbol, sg.snapshot.get('open_price'),
@@ -777,6 +790,11 @@ class CtaProTemplate(CtaTemplate):
                     self.position.short_pos -= sg.volume
 
                 self.write_log(u'持久化空单，共持仓:{}手'.format(abs(self.position.short_pos)))
+
+                if len(remove_ids) > 0:
+                    self.gt.remove_grids_by_ids(direction=Direction.SHORT,ids=remove_ids)
+
+        remove_ids = []
 
         if len(self.gt.dn_grids) <= 0:
             # 加载已开仓的多数据，网格JSON
@@ -795,6 +813,14 @@ class CtaProTemplate(CtaTemplate):
                         lg.order_ids = []
                     # lg.type = self.line.name
                     long_symbol = lg.snapshot.get('mi_symbol', self.vt_symbol)
+                    if lg.traded_volume > 0:
+                        if lg.open_status and lg.volume == lg.traded_volume:
+                            msg = f'{self.strategy_name} {long_symbol}多单持仓{lg.volume},已成交:{lg.traded_volume}，不加载'
+                            self.write_log(msg)
+                            self.send_wechat(msg)
+                            remove_ids.append(lg.id)
+                            continue
+
                     pos_symbols.add(long_symbol)
 
                     self.write_log(u'加载持仓多单[ID:{},vt_symbol:{},价格:{}],[指数{},价格:{}],数量:{}手'
@@ -803,6 +829,9 @@ class CtaProTemplate(CtaTemplate):
                     self.position.long_pos += lg.volume
 
                 self.write_log(f'持久化多单，共持仓:{self.position.long_pos}手')
+
+                if len(remove_ids) > 0:
+                    self.gt.remove_grids_by_ids(direction=Direction.LONG,ids=remove_ids)
 
         self.position.pos = self.position.long_pos + self.position.short_pos
 
@@ -815,15 +844,15 @@ class CtaProTemplate(CtaTemplate):
         self.gt.save()
         self.display_grids()
 
-        if not self.backtesting:
-            if self.vt_symbol not in pos_symbols:
-                pos_symbols.add(self.vt_symbol)
-            if self.idx_symbol not in pos_symbols:
-                pos_symbols.add(self.idx_symbol)
-            # 如果持仓的合约，不在self.vt_symbol中，需要订阅
-            for symbol in list(pos_symbols):
-                self.write_log(f'新增订阅合约:{symbol}')
-                self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=symbol)
+        #if not self.backtesting:
+        if len(self.vt_symbol) > 0 and self.vt_symbol not in pos_symbols:
+            pos_symbols.add(self.vt_symbol)
+        if len(self.idx_symbol) > 0 and self.idx_symbol not in pos_symbols:
+            pos_symbols.add(self.idx_symbol)
+        # 如果持仓的合约，不在self.vt_symbol中，需要订阅
+        for symbol in list(pos_symbols):
+            self.write_log(f'新增订阅合约:{symbol}')
+            self.cta_engine.subscribe_symbol(strategy_name=self.strategy_name, vt_symbol=symbol)
 
     def get_positions(self):
         """
@@ -888,10 +917,16 @@ class CtaProTemplate(CtaTemplate):
         if len(self.active_orders) < 1:
             self.entrust = 0
 
-    def tns_switch_long_pos(self):
-        """切换合约，从持仓的非主力合约，切换至主力合约"""
+    def tns_switch_long_pos(self, open_new=True):
+        """
+        切换合约，从持仓的非主力合约，切换至主力合约
+        :param open_new: 是否开仓主力合约
+        :return:
+        """
 
-        if self.entrust != 0 and self.position.long_pos == 0:
+        if self.entrust != 0:
+            return
+        if self.position.long_pos == 0:
             return
 
         if self.cur_mi_price == 0:
@@ -956,6 +991,14 @@ class CtaProTemplate(CtaTemplate):
                 return
 
             none_mi_grid.snapshot.update({'switched': True})
+
+            # 如果不买入新主力合约，直接返回
+            # 某些策略会自动重新开仓得
+            if not open_new:
+                self.write_log(f'不买入新的主力合约:{self.vt_symbol},数量:{grid.volume}')
+                self.gt.save()
+                return
+
             # 添加买入主力合约
             grid.snapshot.update({'mi_symbol': self.vt_symbol, 'open_price': self.cur_mi_price})
             self.gt.dn_grids.append(grid)
@@ -974,9 +1017,15 @@ class CtaProTemplate(CtaTemplate):
         else:
             self.write_error(f'持仓换月=>委托卖出非主力合约:{none_mi_symbol}失败')
 
-    def tns_switch_short_pos(self):
-        """切换合约，从持仓的非主力合约，切换至主力合约"""
-        if self.entrust != 0 and self.position.short_pos == 0:
+    def tns_switch_short_pos(self,open_new=True):
+        """
+        切换合约，从持仓的非主力合约，切换至主力合约
+        :param open_new: 是否开仓新得主力合约
+        :return:
+        """
+        if self.entrust != 0:
+            return
+        if self.position.short_pos == 0:
             return
 
         if self.cur_mi_price == 0:
@@ -1029,6 +1078,14 @@ class CtaProTemplate(CtaTemplate):
                 return
 
             none_mi_grid.snapshot.update({'switched': True})
+
+            # 如果不开空新主力合约，直接返回
+            # 某些策略会自动重新开仓得
+            if not open_new:
+                self.write_log(f'不开空新的主力合约:{self.vt_symbol},数量:{grid.volume}')
+                self.gt.save()
+                return
+
             # 添加卖出主力合约
             grid.id = str(uuid.uuid1())
             grid.snapshot.update({'mi_symbol': self.vt_symbol, 'open_price': self.cur_mi_price})

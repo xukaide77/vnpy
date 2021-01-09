@@ -1739,6 +1739,7 @@ class PbTdApi(object):
 
     def send_order(self, req: OrderRequest):
         """委托发单"""
+        self.gateway.write_log(f'委托发单:{req.__dict__}')
         if self.gateway.file_type == 'dbf':
             return self.send_order_dbf(req)
         else:

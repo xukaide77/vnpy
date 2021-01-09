@@ -651,9 +651,9 @@ class CtpMdApi(MdApi):
         dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
 
         # 不处理开盘前的tick数据
-        if dt.hour in [8, 20] and dt.minute < 59:
+        if dt.hour in [8, 20] and dt.minute <= 59:
             return
-        if exchange is Exchange.CFFEX and dt.hour == 9 and dt.minute < 29:
+        if exchange is Exchange.CFFEX and dt.hour == 9 and dt.minute <= 29:
             return
 
         tick = TickData(
@@ -1014,11 +1014,11 @@ class CtpTdApi(TdApi):
         account.available = round(float(data["Available"]), 7)
         account.commission = round(float(data['Commission']), 7)
         account.margin = round(float(data['CurrMargin']), 7)
-        account.close_profit = round(float(data['CloseProfit']), 7) + round(
-            float(data.get("SpecProductCloseProfit", 0)), 7)
-        account.holding_profit = round(float(data['PositionProfit']), 7) + round(
-            float(data.get("SpecProductPositionProfit", 0)), 7) + round(
-            float(data.get("SpecProductPositionProfitByAlg", 0)), 7)
+        account.close_profit = round(float(data['CloseProfit']), 7) #+ round(
+            #float(data.get("SpecProductCloseProfit", 0)), 7)
+        account.holding_profit = round(float(data['PositionProfit']), 7) #+ round(
+            #float(data.get("SpecProductPositionProfit", 0)), 7) + round(
+            #float(data.get("SpecProductPositionProfitByAlg", 0)), 7)
         account.trading_day = str(data['TradingDay'])
         if '-' not in account.trading_day and len(account.trading_day) == 8:
             account.trading_day = '-'.join(
@@ -1037,6 +1037,7 @@ class CtpTdApi(TdApi):
         """
         product = PRODUCT_CTP2VT.get(data["ProductClass"], None)
         if product:
+
             contract = ContractData(
                 symbol=data["InstrumentID"],
                 exchange=EXCHANGE_CTP2VT[data["ExchangeID"]],
@@ -1046,6 +1047,9 @@ class CtpTdApi(TdApi):
                 pricetick=data["PriceTick"],
                 gateway_name=self.gateway_name
             )
+            # if 'SA' in contract.symbol:
+            #     self.gateway.write_log(print_dict(data))
+
             # 保证金费率(期权合约的保证金比例数值可能不对，所以设置个0.2的最大值)
             contract.margin_rate = min(0.2, max(data.get('LongMarginRatio', 0), data.get('ShortMarginRatio', 0)))
             if contract.margin_rate == 0:

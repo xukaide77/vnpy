@@ -101,6 +101,8 @@ class AccountRecorder(BaseEngine):
         self.copy_history_strategypos = []  # 需要复制至历史策略持仓得gateway名称
         self.timer_count = 0
 
+        self.event_list = []  # 只侦听处理的事件
+
         self.gw_name_acct_id = {}
 
         self.cur_trading_date = ""
@@ -147,6 +149,8 @@ class AccountRecorder(BaseEngine):
             self.account_dict = d.get('accounts', {})
             self.is_7x24 = d.get('is_7x24', False)
 
+            self.event_list = d.get('event_list',[])
+
             # 识别配置，检查账号是否需要复制委托/成交到历史表
             for gateway_name, account_setting in self.account_dict.items():
                 if account_setting.get('copy_history_orders', False):
@@ -172,18 +176,46 @@ class AccountRecorder(BaseEngine):
     def register_event(self):
         """注册事件监听"""
         self.event_engine.register(EVENT_TIMER, self.update_timer)
-        self.event_engine.register(EVENT_ACCOUNT, self.update_account)
-        self.event_engine.register(EVENT_ORDER, self.update_order)
-        self.event_engine.register(EVENT_TRADE, self.update_trade)
-        self.event_engine.register(EVENT_POSITION, self.update_position)
-        self.event_engine.register(EVENT_HISTORY_TRADE, self.update_history_trade)
-        self.event_engine.register(EVENT_HISTORY_ORDER, self.update_history_order)
-        self.event_engine.register(EVENT_FUNDS_FLOW, self.update_funds_flow)
-        self.event_engine.register(EVENT_STRATEGY_POS, self.update_strategy_pos)
+
+        if len(self.event_list) == 0 or EVENT_ACCOUNT in self.event_list:
+            self.write_log(f'绑定EVENT_ACCOUNT事件 =>更新帐号净值')
+            self.event_engine.register(EVENT_ACCOUNT, self.update_account)
+
+        if len(self.event_list) == 0 or EVENT_ORDER in self.event_list:
+            self.write_log(f'绑定EVENT_ORDER事件 =>更新委托事件')
+            self.event_engine.register(EVENT_ORDER, self.update_order)
+
+        if len(self.event_list) == 0 or EVENT_TRADE in self.event_list:
+            self.write_log(f'绑定EVENT_TRADE事件 =>更新成交事件')
+            self.event_engine.register(EVENT_TRADE, self.update_trade)
+
+        if len(self.event_list) == 0 or EVENT_POSITION in self.event_list:
+            self.write_log(f'绑定EVENT_POSITION事件 =>更新持仓事件')
+            self.event_engine.register(EVENT_POSITION, self.update_position)
+
+        if len(self.event_list) == 0 or EVENT_HISTORY_TRADE in self.event_list:
+            self.write_log(f'绑定EVENT_HISTORY_TRADE事件 =>更新历史成交')
+            self.event_engine.register(EVENT_HISTORY_TRADE, self.update_history_trade)
+
+        if len(self.event_list) == 0 or EVENT_HISTORY_ORDER in self.event_list:
+            self.write_log(f'绑定EVENT_HISTORY_ORDER事件 =>更新历史委托')
+            self.event_engine.register(EVENT_HISTORY_ORDER, self.update_history_order)
+
+        if len(self.event_list) == 0 or EVENT_FUNDS_FLOW in self.event_list:
+            self.write_log(f'绑定EVENT_FUNDS_FLOW事件 =>更新资金流')
+            self.event_engine.register(EVENT_FUNDS_FLOW, self.update_funds_flow)
+
+        if len(self.event_list) == 0 or EVENT_STRATEGY_POS in self.event_list:
+            self.write_log(f'绑定EVENT_STRATEGY_POS事件 =>更新策略持仓')
+            self.event_engine.register(EVENT_STRATEGY_POS, self.update_strategy_pos)
+
         self.event_engine.register(EVENT_ERROR, self.process_gw_error)
         self.event_engine.register(EVENT_WARNING, self.process_warning)
         self.event_engine.register(EVENT_CRITICAL, self.process_critical)
-        self.event_engine.register(EVENT_STRATEGY_SNAPSHOT, self.update_strategy_snapshot)
+
+        if len(self.event_list) == 0 or EVENT_STRATEGY_SNAPSHOT in self.event_list:
+            self.write_log(f'绑定EVENT_STRATEGY_SNAPSHOT事件 =>更新策略切片')
+            self.event_engine.register(EVENT_STRATEGY_SNAPSHOT, self.update_strategy_snapshot)
 
     # ----------------------------------------------------------------------
     def update_timer(self, event: Event):
@@ -200,24 +232,25 @@ class AccountRecorder(BaseEngine):
 
         dt_now = datetime.now()
 
-        # 提交查询历史交易记录/历史委托/资金流水
-        for data_type in [HISTORY_ORDER_COL, HISTORY_TRADE_COL, FUNDS_FLOW_COL]:
-            dt = self.last_qry_dict.get(data_type, None)
-            queryed = False
-            for gw_name, account_info in self.account_dict.items():
-                if dt is None or (dt_now - dt).total_seconds() > 60 * 5:
-                    begin_day = self.get_begin_day(gw_name, data_type).replace('-', '')
-                    end_day = dt_now.strftime('%Y%m%d')
-                    gw = self.main_engine.get_gateway(gw_name)
-                    if gw is None:
-                        continue
-                    if hasattr(gw, 'qryHistory'):
-                        self.write_log(u'向{}请求{}数据，{}~{}'.format(gw_name, data_type, begin_day, end_day))
-                        gw.qryHistory(data_type, begin_day, end_day)
-                    queryed = True
+        if len(self.event_list) == 0 or 'eHistoryTrade.' in self.event_list:
+            # 提交查询历史交易记录/历史委托/资金流水
+            for data_type in [HISTORY_ORDER_COL, HISTORY_TRADE_COL, FUNDS_FLOW_COL]:
+                dt = self.last_qry_dict.get(data_type, None)
+                queryed = False
+                for gw_name, account_info in self.account_dict.items():
+                    if dt is None or (dt_now - dt).total_seconds() > 60 * 5:
+                        begin_day = self.get_begin_day(gw_name, data_type).replace('-', '')
+                        end_day = dt_now.strftime('%Y%m%d')
+                        gw = self.main_engine.get_gateway(gw_name)
+                        if gw is None:
+                            continue
+                        if hasattr(gw, 'qryHistory'):
+                            self.write_log(u'向{}请求{}数据，{}~{}'.format(gw_name, data_type, begin_day, end_day))
+                            gw.qryHistory(data_type, begin_day, end_day)
+                        queryed = True
 
-            if queryed:
-                self.last_qry_dict.update({data_type: dt})
+                if queryed:
+                    self.last_qry_dict.update({data_type: dt})
 
     # ----------------------------------------------------------------------
     def update_account(self, event: Event):

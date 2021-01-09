@@ -386,16 +386,19 @@ class TickCombiner(object):
             # leg1合约
             self.last_leg1_tick = tick
             if self.last_leg2_tick is not None:
-                if self.last_leg1_tick.datetime.replace(microsecond=0) == self.last_leg2_tick.datetime.replace(
-                        microsecond=0):
+                #if self.last_leg1_tick.datetime.replace(microsecond=0) == self.last_leg2_tick.datetime.replace(
+                #        microsecond=0):
+                # 有些跨交易所时间戳会不一致，差1~2秒
+                if abs((self.last_leg1_tick.datetime - self.last_leg2_tick.datetime).total_seconds())<3:
                     combinable = True
 
         elif tick.symbol == self.leg2_symbol:
             # leg2合约
             self.last_leg2_tick = tick
             if self.last_leg1_tick is not None:
-                if self.last_leg2_tick.datetime.replace(microsecond=0) == self.last_leg1_tick.datetime.replace(
-                        microsecond=0):
+                # if self.last_leg2_tick.datetime.replace(microsecond=0) == self.last_leg1_tick.datetime.replace(
+                #         microsecond=0):
+                if abs((self.last_leg1_tick.datetime - self.last_leg2_tick.datetime).total_seconds()) < 3:
                     combinable = True
 
         # 不能合并

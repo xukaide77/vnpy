@@ -70,7 +70,7 @@ INIT_TDX_MARKET_MAP = {
     'CJL9': 28, 'CYL9': 28, 'FGL9': 28, 'JRL9': 28, 'LRL9': 28, 'MAL9': 28,
     'OIL9': 28, 'PML9': 28, 'RIL9': 28, 'RML9': 28, 'RSL9': 28, 'SFL9': 28,
     'SML9': 28, 'SRL9': 28, 'TAL9': 28, 'ICL9': 47, 'IFL9': 47, 'IHL9': 47,
-    'TFL9': 47, 'TL9': 47, 'TSL9': 47, 'SAL9': 28, 'PGL9': 29, 'PFL9': 28,}
+    'TFL9': 47, 'TL9': 47, 'TSL9': 47, 'SAL9': 28, 'PGL9': 29, 'PFL9': 28, 'LH':29}
 # 常量
 QSIZE = 500
 ALL_MARKET_BEGIN_HOUR = 8
@@ -86,6 +86,48 @@ def get_tdx_marketid(symbol):
     if market_id is None:
         raise KeyError(f'{tdx_index_symbol}不存在INIT_TDX_MARKET_MAP中')
     return market_id
+
+
+def get_3rd_friday():
+    """获取当前月的第三个星期五"""
+    first_day_in_month = datetime.now().replace(day=1)  # 本月第一天
+
+    # 获取当前月的所有星期5的日
+    fridays = [i for i in range(1, 28) if (first_day_in_month + timedelta(days=i - 1)).isoweekday() == 5]
+    if len(fridays) < 3:
+        raise Exception(f'获取当前月异常:{fridays}')
+
+    # 第三个星期五，是第几天
+    third_friday = fridays[2]
+
+    return datetime.now().replace(day=third_friday)
+
+
+def convert_cffex_symbol(mi_symbol):
+    """
+    转换中证交易所的合约
+    如果当前日为当前月的第三个星期的星期5前两天，则提前转换为下个月的合约
+    :param mi_symbol:
+    :return:
+    """
+    underly_symbol = get_underlying_symbol(mi_symbol).upper()
+
+    # 第三个星期五
+    third_friday = get_3rd_friday()
+
+    # 日期是否为星期三，星期四
+    if not third_friday - timedelta(days=2) <= datetime.now() <= third_friday:
+        return mi_symbol
+
+    cur_year_month = datetime.now().strftime('%y%m')
+
+    # 合约是否大于当月合约
+    if mi_symbol > f'{underly_symbol}{cur_year_month}':
+        return mi_symbol
+
+    next_year_month = (datetime.now() + timedelta(days=30)).strftime('%y%m')
+
+    return f'{underly_symbol}{next_year_month}'
 
 
 class TdxFutureData(object):
@@ -889,16 +931,21 @@ class TdxFutureData(object):
                 vn_exchange = Exchange.INE
             else:
                 vn_exchange = Tdx_Vn_Exchange_Map.get(str(tdx_market_id))
+
+            # 根据合约全路径、交易所 => 真实合约
             mi_symbol = get_real_symbol_by_exchange(full_symbol, vn_exchange)
 
-            # if underlying_symbol == 'IC':
-            #     debug = 1
+            if underlying_symbol in ['IC', 'IF', 'IH']:
+                mi_symbol = convert_cffex_symbol(mi_symbol)
+
             # 更新登记 短合约：真实主力合约
             self.write_log(
                 '{},{},{},{},{}'.format(tdx_market_id, full_symbol, underlying_symbol, mi_symbol, vn_exchange))
             if underlying_symbol in self.future_contracts:
                 info = self.future_contracts.get(underlying_symbol)
-                if mi_symbol != info.get('mi_symbol', ''):
+                cur_mi_symbol = info.get('mi_symbol', None)
+
+                if cur_mi_symbol is None or mi_symbol > cur_mi_symbol:
                     self.write_log(u'主力合约变化:{} =>{}'.format(info.get('mi_symbol'), mi_symbol))
                     info.update({'mi_symbol': mi_symbol, 'full_symbol': full_symbol})
                     self.future_contracts.update({underlying_symbol: info})

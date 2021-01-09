@@ -1872,6 +1872,8 @@ class CtaEngine(BaseEngine):
                         u'{}({})'.format(strategy_pos['strategy_name'], abs(pos.get('volume', 0))))
                     self.write_log(u'更新{}策略持多仓=>{}'.format(vt_symbol, symbol_pos.get('策略多单', 0)))
 
+                compare_pos.update({vt_symbol: symbol_pos})
+
         pos_compare_result = ''
         # 精简输出
         compare_info = ''

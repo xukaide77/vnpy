@@ -153,6 +153,12 @@ class MainWindow(QtWidgets.QMainWindow):
             "contract.ico",
             partial(self.open_widget, ContractManager, "contract")
         )
+        self.add_menu_action(
+            help_menu,
+            "保存合约",
+            "contract.ico",
+            self.save_contracts
+        )
 
         self.add_menu_action(
             help_menu,
@@ -317,6 +323,9 @@ class MainWindow(QtWidgets.QMainWindow):
         if isinstance(state, QtCore.QByteArray):
             self.restoreState(state)
             self.restoreGeometry(geometry)
+
+    def save_contracts(self) -> None:
+        self.main_engine.save_contracts()
 
     def restore_window_setting(self) -> None:
         """
