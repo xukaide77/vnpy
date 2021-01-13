@@ -937,6 +937,7 @@ class TdxFutureData(object):
 
             if underlying_symbol in ['IC', 'IF', 'IH']:
                 mi_symbol = convert_cffex_symbol(mi_symbol)
+                full_symbol = get_full_symbol(mi_symbol)
 
             # 更新登记 短合约：真实主力合约
             self.write_log(
@@ -944,8 +945,9 @@ class TdxFutureData(object):
             if underlying_symbol in self.future_contracts:
                 info = self.future_contracts.get(underlying_symbol)
                 cur_mi_symbol = info.get('mi_symbol', None)
+                cur_full_symbol = info.get('full_symbol', None)
 
-                if cur_mi_symbol is None or mi_symbol > cur_mi_symbol:
+                if cur_mi_symbol is None or mi_symbol > cur_mi_symbol or cur_full_symbol is None or full_symbol > cur_full_symbol:
                     self.write_log(u'主力合约变化:{} =>{}'.format(info.get('mi_symbol'), mi_symbol))
                     info.update({'mi_symbol': mi_symbol, 'full_symbol': full_symbol})
                     self.future_contracts.update({underlying_symbol: info})
