@@ -21,9 +21,9 @@ class RpcGateway(BaseGateway):
 
     exchanges = list(Exchange)
 
-    def __init__(self, event_engine):
+    def __init__(self, event_engine, gateway_name="RPC"):
         """Constructor"""
-        super().__init__(event_engine, "RPC")
+        super().__init__(event_engine, gateway_name)
 
         self.symbol_gateway_map = {}
 

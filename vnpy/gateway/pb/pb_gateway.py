@@ -1232,8 +1232,13 @@ class PbTdApi(object):
 
                 order_dt = datetime.strptime(f'{order_date} {order_time}', "%Y%m%d %H%M%S")
                 direction = DIRECTION_STOCK_NAME2VT.get(data["委托方向"])
+                offset = Offset.NONE
                 if direction is None:
                     direction = Direction.NET
+                elif direction == Direction.LONG:
+                    offset = Offset.OPEN
+                elif direction == Direction.SHORT:
+                    offset = Offset.CLOSE
                 sys_order = OrderData(
                     gateway_name=self.gateway_name,
                     symbol=data["证券代码"],
@@ -1243,7 +1248,7 @@ class PbTdApi(object):
                     accountid=self.userid,
                     type=ORDERTYPE_NAME2VT.get(data["价格类型"], OrderType.LIMIT),
                     direction=direction,
-                    offset=Offset.NONE,
+                    offset=offset,
                     price=float(data["委托价格"]),
                     volume=float(data["委托数量"]),
                     traded=float(data["成交数量"]),
@@ -1306,8 +1311,13 @@ class PbTdApi(object):
                     self.gateway.write_log(f'本地委托编号{local_orderid}不在本地订单中')
 
                     direction = DIRECTION_STOCK_NAME2VT.get(str(data.wtfx).strip())
+                    offset = Offset.NONE
                     if direction is None:
                         direction = Direction.NET
+                    elif direction == Direction.LONG:
+                        offset = Offset.OPEN
+                    elif direction == Direction.SHORT:
+                        offset = Offset.CLOSE
                     if order_status == Status.ALLTRADED:
                         traded = data.wtsl
                     else:
@@ -1323,7 +1333,7 @@ class PbTdApi(object):
                         accountid=self.userid,
                         type=ORDERTYPE_PB2VT.get(str(data.wtjglx).strip(), OrderType.LIMIT),
                         direction=direction,
-                        offset=Offset.NONE,
+                        offset=offset,
                         price=float(data.wtjg),
                         volume=float(data.wtsl),
                         traded=traded,
@@ -1460,6 +1470,14 @@ class PbTdApi(object):
                 trade_date = data["成交日期"]
                 trade_time = data["成交时间"]
                 trade_dt = datetime.strptime(f'{trade_date} {trade_time}', "%Y%m%d %H%M%S")
+                direction = DIRECTION_STOCK_NAME2VT.get(data["委托方向"])
+                offset = Offset.NONE
+                if direction is None:
+                    direction = Direction.NET
+                elif direction == Direction.LONG:
+                    offset = Offset.OPEN
+                elif direction == Direction.SHORT:
+                    offset = Offset.CLOSE
                 trade = TradeData(
                     gateway_name=self.gateway_name,
                     symbol=data["证券代码"],
@@ -1468,8 +1486,8 @@ class PbTdApi(object):
                     tradeid=sys_tradeid,
                     sys_orderid=sys_orderid,
                     accountid=self.userid,
-                    direction=DIRECTION_STOCK_NAME2VT.get(data["委托方向"]),
-                    offset=Offset.NONE,
+                    direction=direction,
+                    offset=offset,
                     price=float(data["成交价格"]),
                     volume=float(data["成交数量"]),
                     datetime=trade_dt,
@@ -1514,7 +1532,14 @@ class PbTdApi(object):
                     trade_date = str(data.cjrq).strip()
                     trade_time = str(data.cjsj).strip()
                     trade_dt = datetime.strptime(f'{trade_date} {trade_time}', "%Y%m%d %H%M%S")
-
+                    direction = DIRECTION_ORDER_PB2VT.get(str(data.wtfx).strip())
+                    offset = Offset.NONE
+                    if direction is None:
+                        direction = Direction.NET
+                    elif direction == Direction.LONG:
+                        offset = Offset.OPEN
+                    elif direction == Direction.SHORT:
+                        offset = Offset.CLOSE
                     trade = TradeData(
                         gateway_name=self.gateway_name,
                         symbol=str(data.zqdm).strip(),
@@ -1523,8 +1548,8 @@ class PbTdApi(object):
                         tradeid=sys_tradeid,
                         sys_orderid=sys_orderid,
                         accountid=self.userid,
-                        direction=DIRECTION_ORDER_PB2VT.get(str(data.wtfx).strip()),
-                        offset=Offset.NONE,
+                        direction=direction,
+                        offset=offset,
                         price=float(data.cjjg),
                         volume=int(data.cjsl),
                         datetime=trade_dt,
@@ -1582,7 +1607,14 @@ class PbTdApi(object):
                 trade_date = str(data["CJRQ"]).lstrip()
                 trade_time = str(data["CJSJ"]).lstrip()
                 trade_dt = datetime.strptime(f'{trade_date} {trade_time}', "%Y%m%d %H%M%S")
-
+                direction = DIRECTION_ORDER_PB2VT.get(str(data.wtfx).strip())
+                offset = Offset.NONE
+                if direction is None:
+                    direction = Direction.NET
+                elif direction == Direction.LONG:
+                    offset = Offset.OPEN
+                elif direction == Direction.SHORT:
+                    offset = Offset.CLOSE
                 trade = TradeData(
                     gateway_name=self.gateway_name,
                     symbol=str(data["ZQDM"]).lstrip(),
@@ -1591,8 +1623,8 @@ class PbTdApi(object):
                     tradeid=sys_tradeid,
                     sys_orderid=sys_orderid,
                     accountid=self.userid,
-                    direction=DIRECTION_ORDER_PB2VT.get(str(data["WTFX"]).lstrip()),
-                    offset=Offset.NONE,
+                    direction=direction,
+                    offset=offset,
                     price=float(str(data["CJJG"]).lstrip()),
                     volume=float(str(data["CJSL"]).lstrip()),
                     datetime=trade_dt,

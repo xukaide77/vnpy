@@ -795,7 +795,7 @@ class CtaLineBar(object):
         """
         # Tick 有效性检查
         if not self.is_7x24 and (tick.datetime.hour == 8 or tick.datetime.hour == 20):
-            self.write_log(u'竞价排名tick时间:{0}'.format(tick.datetime))
+            self.write_log(u'{}竞价排名tick时间:{}'.format(self.name, tick.datetime))
             return
         self.cur_datetime = tick.datetime
 
@@ -1256,14 +1256,14 @@ class CtaLineBar(object):
 
         # K线的日期时间
         self.cur_bar.trading_day = tick.trading_day  # K线所在的交易日期
-        self.cur_bar.date = tick.date  # K线的日期，（夜盘的话，与交易日期不同哦）
+        #self.cur_bar.date = tick.date  # K线的日期，（夜盘的话，与交易日期不同哦）
         self.cur_bar.datetime = tick.datetime
         if (self.interval == Interval.SECOND and self.bar_interval % 60 == 0) \
-                or self.interval in [Interval.MINUTE, Interval.HOUR, Interval.DAILY]:
+                or self.interval in [Interval.MINUTE, Interval.HOUR, Interval.DAILY, Interval.WEEKLY]:
             # K线的日期时间（去除秒）设为第一个Tick的时间
             self.cur_bar.datetime = self.cur_bar.datetime.replace(second=0, microsecond=0)
-        self.cur_bar.time = self.cur_bar.datetime.strftime('%H:%M:%S')
-        self.cur_bar.volume = tick.last_volume
+        #self.cur_bar.time = self.cur_bar.datetime.strftime('%H:%M:%S')
+        self.cur_bar.volume = tick.last_volume if tick.last_volume > 0 else tick.volume
         if self.cur_trading_day != self.cur_bar.trading_day or not self.line_bar:
             # bar的交易日与记录的当前交易日不一致：
             self.cur_trading_day = self.cur_bar.trading_day
@@ -1271,6 +1271,8 @@ class CtaLineBar(object):
         self.is_first_tick = True  # 标识该Tick属于该Bar的第一个tick数据
 
         # 6、将生成的正在合成的self.cur_bar 推入到line_bar队列
+        if self.interval in [Interval.HOUR, Interval.DAILY, Interval.WEEKLY]:
+            self.write_log(f'[{self.name}] create new bar, [{self.cur_bar.datetime}==> ]')
         self.line_bar.append(self.cur_bar)  # 推入到lineBar队列
 
     def generate_bar(self, tick: TickData):
@@ -1385,7 +1387,7 @@ class CtaLineBar(object):
             # volume_change = tick.volume - self.last_tick.volume
             # lastbar.volume += max(volume_change, 0)
             # 更新 bar内成交量volume 新版根据tick内成交量运算
-            lastBar.volume += tick.last_volume
+            lastBar.volume += tick.last_volume if tick.last_volume > 0 else tick.volume
 
             # 更新Bar的颜色
             if lastBar.close_price > lastBar.open_price:
@@ -6483,7 +6485,7 @@ class CtaMinuteBar(CtaLineBar):
             del self.line_bar[0]
 
         # 与最后一个BAR的时间比对，判断是否超过K线周期
-        lastBar = self.line_bar[-1]
+        last_bar = self.line_bar[-1]
         is_new_bar = False
 
         endtick = False
@@ -6509,11 +6511,11 @@ class CtaMinuteBar(CtaLineBar):
         is_new_bar = False
 
         # 不在同一交易日，推入新bar
-        if self.cur_trading_day != tick.trading_day:
+        if len(tick.trading_day) > 0 and  len(self.cur_trading_day) > 0 and self.cur_trading_day != tick.trading_day:
             # self.write_log('{} drawLineBar() new_bar,{} curTradingDay:{},tick.trading_day:{} bars_count={}'
             #                 .format(self.name, tick.datetime.strftime("%Y-%m-%d %H:%M:%S"), self.cur_trading_day,
             #                         tick.trading_day, self.bars_count))
-
+            self.write_log(f'trading_day:{self.cur_trading_day} => tick.trading_day:{tick.trading_day}  ')
             is_new_bar = True
             self.cur_trading_day = tick.trading_day
             self.bars_count = bars_passed
@@ -6533,8 +6535,8 @@ class CtaMinuteBar(CtaLineBar):
 
             if (
                     (
-                            tick.datetime.hour * 60 + tick.datetime.minute) % self.bar_interval == 0 and tick.datetime.minute != lastBar.datetime.minute) or (
-                    tick.datetime - lastBar.datetime).total_seconds() > self.bar_interval * 60:
+                            tick.datetime.hour * 60 + tick.datetime.minute) % self.bar_interval == 0 and tick.datetime.minute != last_bar.datetime.minute) or (
+                    tick.datetime - last_bar.datetime).total_seconds() > self.bar_interval * 60:
                 # self.write_log('{} drawLineBar() new_bar,{} lastbar:{}, bars_count={}'
                 #                 .format(self.name, tick.datetime, lastBar.datetime,
                 #                         self.bars_count))
@@ -6544,25 +6546,25 @@ class CtaMinuteBar(CtaLineBar):
             # 创建并推入新的Bar
             self.first_tick(tick)
             # 触发OnBar事件
-            self.on_bar(lastBar)
+            self.on_bar(last_bar)
         else:
             # 更新当前最后一个bar
             self.barFirstTick = False
 
             # 更新最高价、最低价、收盘价、成交量
-            lastBar.high_price = max(lastBar.high_price, tick.last_price)
-            lastBar.low_price = min(lastBar.low_price, tick.last_price)
-            lastBar.close_price = tick.last_price
-            lastBar.open_interest = tick.open_interest
-            lastBar.volume += tick.volume
+            last_bar.high_price = max(last_bar.high_price, tick.last_price)
+            last_bar.low_price = min(last_bar.low_price, tick.last_price)
+            last_bar.close_price = tick.last_price
+            last_bar.open_interest = tick.open_interest
+            last_bar.volume += tick.last_volume if tick.last_volume > 0 else tick.volume
 
             # 更新Bar的颜色
-            if lastBar.close_price > lastBar.open_price:
-                lastBar.color = Color.RED
-            elif lastBar.close_price < lastBar.open_price:
-                lastBar.color = Color.BLUE
+            if last_bar.close_price > last_bar.open_price:
+                last_bar.color = Color.RED
+            elif last_bar.close_price < last_bar.open_price:
+                last_bar.color = Color.BLUE
             else:
-                lastBar.color = Color.EQUAL
+                last_bar.color = Color.EQUAL
 
             # 实时计算
             self.rt_executed = False
@@ -6626,7 +6628,7 @@ class CtaHourBar(CtaLineBar):
 
         if bar.trading_day is None:
             if self.is_7x24:
-                bar.trading_day = bar.date
+                bar.trading_day = bar.datetime.strftime('%Y-%m-%d')
             else:
                 bar.trading_day = get_trading_date(bar.datetime)
 
@@ -6722,7 +6724,7 @@ class CtaHourBar(CtaLineBar):
                 endtick = True
 
         # 与最后一个BAR的时间比对，判断是否超过K线周期
-        lastBar = self.line_bar[-1]
+        last_bar = self.line_bar[-1]
         is_new_bar = False
 
         if self.last_minute is None:
@@ -6731,7 +6733,8 @@ class CtaHourBar(CtaLineBar):
             self.last_minute = tick.datetime.minute
 
         # 不在同一交易日，推入新bar
-        if self.cur_trading_day != tick.trading_day:
+        if len(tick.trading_day) > 0 and self.cur_trading_day != tick.trading_day:
+            self.write_log(f'trading_day:{self.cur_trading_day} => tick.trading_day: {tick.trading_day} ')
             is_new_bar = True
             # 去除分钟和秒数
             tick.datetime = datetime.strptime(tick.datetime.strftime('%Y-%m-%d %H:00:00'), '%Y-%m-%d %H:%M:%S')
@@ -6750,7 +6753,7 @@ class CtaHourBar(CtaLineBar):
 
         if self.is_7x24:
             # 数字货币，用前后时间间隔
-            if (tick.datetime - lastBar.datetime).total_seconds() >= 3600 * self.bar_interval:
+            if (tick.datetime - last_bar.datetime).total_seconds() >= 3600 * self.bar_interval:
                 # self.write_log('{} drawLineBar() new_bar,{} - {} > 3600 * {} '
                 #                 .format(self.name, tick.datetime.strftime("%Y-%m-%d %H:%M:%S"),
                 #                         lastBar.datetime.strftime("%Y-%m-%d %H:%M:%S"),
@@ -6780,27 +6783,28 @@ class CtaHourBar(CtaLineBar):
             self.first_tick(tick)
             self.m1_bars_count = 1
             # 触发OnBar事件
-            self.on_bar(lastBar)
+            self.write_log(f'[{self.name}] process on_bar event [{last_bar.datetime} => {tick.datetime}]')
+            self.on_bar(last_bar)
 
         else:
             # 更新当前最后一个bar
             self.barFirstTick = False
 
             # 更新最高价、最低价、收盘价、成交量
-            lastBar.high_price = max(lastBar.high_price, tick.last_price)
-            lastBar.low_price = min(lastBar.low_price, tick.last_price)
-            lastBar.close_price = tick.last_price
-            lastBar.open_interest = tick.open_interest
+            last_bar.high_price = max(last_bar.high_price, tick.last_price)
+            last_bar.low_price = min(last_bar.low_price, tick.last_price)
+            last_bar.close_price = tick.last_price
+            last_bar.open_interest = tick.open_interest
 
-            lastBar.volume += tick.volume
+            last_bar.volume += tick.last_volume if tick.last_volume > 0 else tick.volume
 
             # 更新Bar的颜色
-            if lastBar.close_price > lastBar.open_price:
-                lastBar.color = Color.RED
-            elif lastBar.close_price < lastBar.open_price:
-                lastBar.color = Color.BLUE
+            if last_bar.close_price > last_bar.open_price:
+                last_bar.color = Color.RED
+            elif last_bar.close_price < last_bar.open_price:
+                last_bar.color = Color.BLUE
             else:
-                lastBar.color = Color.EQUAL
+                last_bar.color = Color.EQUAL
 
             # 实时计算
             self.rt_executed = False
@@ -6872,14 +6876,14 @@ class CtaDayBar(CtaLineBar):
         if bar_len == 0:
             new_bar = copy.deepcopy(bar)
             self.line_bar.append(new_bar)
-            self.cur_trading_day = bar.trading_day if bar.trading_day is not None else bar.date
+            self.cur_trading_day = bar.trading_day if bar.trading_day is not None else get_trading_date(bar.datetime)
             if bar_is_completed:
                 self.on_bar(bar)
             return
 
         # 与最后一个BAR的时间比对，判断是否超过K线的周期
         lastBar = self.line_bar[-1]
-        self.cur_trading_day = bar.trading_day if bar.trading_day is not None else bar.date
+        self.cur_trading_day = bar.trading_day if bar.trading_day is not None else get_trading_date(bar.datetime)
 
         is_new_bar = False
         if bar_is_completed:
@@ -6932,12 +6936,13 @@ class CtaDayBar(CtaLineBar):
             del self.line_bar[0]
 
         # 与最后一个BAR的时间比对，判断是否超过K线周期
-        lastBar = self.line_bar[-1]
+        last_bar = self.line_bar[-1]
 
         is_new_bar = False
 
         # 交易日期不一致，新的交易日
-        if len(tick.trading_day) > 0 and tick.trading_day != lastBar.trading_day:
+        if len(tick.trading_day) > 0 and tick.trading_day != last_bar.trading_day:
+            self.write_log(f'trading_day:{last_bar.trading_day} => tick.trading_day:{tick.trading_day}')
             is_new_bar = True
 
         # 数字货币方面，如果当前tick 日期与bar的日期不一致.(取消，按照上面的统一处理，因为币安是按照UTC时间算的每天开始，ok是按照北京时间开始)
@@ -6948,26 +6953,27 @@ class CtaDayBar(CtaLineBar):
             # 创建并推入新的Bar
             self.first_tick(tick)
             # 触发OnBar事件
-            self.on_bar(lastBar)
+            self.write_log(f'[{self.name}] process on_bar event [{last_bar.datetime} => {tick.datetime}]')
+            self.on_bar(last_bar)
 
         else:
             # 更新当前最后一个bar
             self.barFirstTick = False
 
             # 更新最高价、最低价、收盘价、成交量
-            lastBar.high_price = max(lastBar.high_price, tick.last_price)
-            lastBar.low_price = min(lastBar.low_price, tick.last_price)
-            lastBar.close_price = tick.last_price
-            lastBar.open_interest = tick.open_interest
-            lastBar.volume += tick.volume
+            last_bar.high_price = max(last_bar.high_price, tick.last_price)
+            last_bar.low_price = min(last_bar.low_price, tick.last_price)
+            last_bar.close_price = tick.last_price
+            last_bar.open_interest = tick.open_interest
+            last_bar.volume += tick.last_volume if tick.last_volume > 0 else tick.volume
 
             # 更新Bar的颜色
-            if lastBar.close_price > lastBar.open_price:
-                lastBar.color = Color.RED
-            elif lastBar.close_price < lastBar.open_price:
-                lastBar.color = Color.BLUE
+            if last_bar.close_price > last_bar.open_price:
+                last_bar.color = Color.RED
+            elif last_bar.close_price < last_bar.open_price:
+                last_bar.color = Color.BLUE
             else:
-                lastBar.color = Color.EQUAL
+                last_bar.color = Color.EQUAL
 
             # 实时计算
             self.rt_executed = False
@@ -7190,7 +7196,7 @@ class CtaWeekBar(CtaLineBar):
             lastBar.close_price = tick.last_price
             lastBar.open_interest = tick.open_interest
             # 更新日内总交易量，和bar内交易量
-            lastBar.volume += tick.volume
+            lastBar.volume += tick.last_volume if tick.last_volume > 0 else tick.volume
 
             # 更新Bar的颜色
             if lastBar.close_price > lastBar.open_price:

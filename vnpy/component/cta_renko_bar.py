@@ -21,7 +21,6 @@ from vnpy.trader.utility import round_to
 from vnpy.trader.constant import Direction, Color
 from vnpy.component.cta_period import CtaPeriod, Period
 
-
 try:
     from vnpy.component.chanlun import ChanGraph, ChanLibrary
 except Exception as ex:
@@ -587,9 +586,9 @@ class CtaRenkoBar(object):
         """修正tick的价格，取平均值"""
         # 修正最新价
         if tick.last_price is None or tick.last_price == 0:
-            if tick.ask_price1 == 0 and tick.bid_price1 == 0:
+            if tick.ask_price_1 == 0 and tick.bid_price_1 == 0:
                 return None
-            tick.last_price = round_to(target=self.price_tick, value=(tick.ask_price1 + tick.bid_price1) / 2)
+            tick.last_price = round_to(target=self.price_tick, value=(tick.ask_price_1 + tick.bid_price_1) / 2)
 
         if self.activate_kf_tick:
             avg_price = self.get_kf_tick_lastprice(tick.last_price, tick.datetime)
@@ -598,10 +597,10 @@ class CtaRenkoBar(object):
 
         if avg_price != tick.last_price:
             tick.last_price = avg_price
-            if tick.ask_price1 != 0:
-                tick.ask_price1 = tick.last_price + self.price_tick
-            if tick.bid_price1 != 0:
-                tick.bid_price1 = tick.last_price - self.price_tick
+            if tick.ask_price_1 != 0:
+                tick.ask_price_1 = tick.last_price + self.price_tick
+            if tick.bid_price_1 != 0:
+                tick.bid_price_1 = tick.last_price - self.price_tick
         return tick
 
     def on_tick(self, tick):
@@ -774,10 +773,10 @@ class CtaRenkoBar(object):
             new_height = int(
                 max(cur_price / 1000, self.price_tick) * self.kilo_height / self.price_tick) * self.price_tick
             if new_height != self.height:
-                #self.write_log(u'修改:{}砖块高度:{}=>{}'.format(self.name, self.height, new_height))
+                # self.write_log(u'修改:{}砖块高度:{}=>{}'.format(self.name, self.height, new_height))
                 self.height = new_height
         elif height != self.height:
-            #self.write_log(u'修改:{}砖块高度:{}=>{}'.format(self.name, self.height, height))
+            # self.write_log(u'修改:{}砖块高度:{}=>{}'.format(self.name, self.height, height))
             self.height = height
 
     def runtime_recount(self):
@@ -985,7 +984,7 @@ class CtaRenkoBar(object):
         elif tick.last_price > self.cur_bar.up_band:
             self.cur_bar.high_time = tick.datetime
 
-        self.cur_bar.volume = tick.volume
+        self.cur_bar.volume = tick.last_volume if tick.last_volume > 0 else tick.volume
         self.cur_bar.open_interest = tick.open_interest
 
     # ----------------------------------------------------------------------
@@ -1041,7 +1040,7 @@ class CtaRenkoBar(object):
                 self.cur_bar.low_price = min(tick.last_price, self.cur_bar.low_price)
                 self.cur_bar.close_price = tick.last_price
 
-                self.cur_bar.volume = self.cur_bar.volume + tick.volume
+                self.cur_bar.volume += tick.last_volume if tick.last_volume > 0 else tick.volume
                 self.cur_bar.open_interest = tick.open_interest
 
             # 仅为第一个bar，后续逻辑无意义，退出
@@ -1081,7 +1080,7 @@ class CtaRenkoBar(object):
             self.cur_bar.low_price = min(tick.last_price, self.cur_bar.low_price)
             self.cur_bar.close_price = tick.last_price
 
-            self.cur_bar.volume = self.cur_bar.volume + tick.volume
+            self.cur_bar.volume += tick.last_volume if tick.last_volume > 0 else tick.volume
             self.cur_bar.open_interest = tick.open_interest
 
             # 实时计算临时砖块的颜色
@@ -2140,7 +2139,7 @@ class CtaRenkoBar(object):
         :param ma_num:第几条均线, 1，对应para_ma1_len,,,,
         :return:
         """
-        if self.para_ma1_len <=0 and self.para_ma2_len <=0 and self.para_ma3_len <= 0:
+        if self.para_ma1_len <= 0 and self.para_ma2_len <= 0 and self.para_ma3_len <= 0:
             return
         if self.cur_bar:
             rt_close_array = np.append(self.close_array, [self.cur_bar.close_price])
@@ -3018,7 +3017,7 @@ class CtaRenkoBar(object):
                 # 发生死叉
                 self.cur_kd_count = -1
                 self.cur_kd_cross = round((self.line_k[-1] + self.line_k[-2]) / 2, self.round_n)
-                self.cur_kd_cross_price =self.cur_price
+                self.cur_kd_cross_price = self.cur_price
 
     def __count_macd(self):
         """
@@ -3381,8 +3380,8 @@ class CtaRenkoBar(object):
                                        initial_state_mean=self.close_array[-1],
                                        initial_state_covariance=1,
                                        transition_covariance=0.01,
-                                       observation_covariance = self.para_kf_obscov_len
-                )
+                                       observation_covariance=self.para_kf_obscov_len
+                                       )
             except Exception:
                 self.write_log(u'导入卡尔曼过滤器失败,需先安装 pip install pykalman')
                 self.para_active_kf = False
@@ -4069,9 +4068,9 @@ class CtaRenkoBar(object):
             del self.chan_graph
             self.chan_graph = None
         self.chan_graph = ChanGraph(chan_lib=self.chan_lib,
-                                    index=self.index_list[-self.bar_len+1:],
-                                    high=self.high_array[-self.bar_len+1:],
-                                    low=self.low_array[-self.bar_len+1:])
+                                    index=self.index_list[-self.bar_len + 1:],
+                                    high=self.high_array[-self.bar_len + 1:],
+                                    low=self.low_array[-self.bar_len + 1:])
         self._fenxing_list = self.chan_graph.fenxing_list
         self._bi_list = self.chan_graph.bi_list
         self._bi_zs_list = self.chan_graph.bi_zhongshu_list
@@ -4150,15 +4149,15 @@ class CtaRenkoBar(object):
         # 背驰: 同向分笔，逐笔提升，最后一笔，比上一同向笔，短,斜率也比上一同向笔小
         if direction == 1:
             if duan.bi_list[-1].low > duan.bi_list[-3].low > duan.bi_list[-5].low \
-                and duan.bi_list[-1].low > duan.bi_list[-5].high \
-                and duan.bi_list[-1].height < duan.bi_list[-3].height \
-                and duan.bi_list[-1].atan < duan.bi_list[-3].atan:
+                    and duan.bi_list[-1].low > duan.bi_list[-5].high \
+                    and duan.bi_list[-1].height < duan.bi_list[-3].height \
+                    and duan.bi_list[-1].atan < duan.bi_list[-3].atan:
                 return True
 
         if direction == -1:
             if duan.bi_list[-1].high < duan.bi_list[-3].high < duan.bi_list[-5].high \
-                and duan.bi_list[-1].high < duan.bi_list[-5].low \
-                    and duan.bi_list[-1].height < duan.bi_list[-3].height\
+                    and duan.bi_list[-1].high < duan.bi_list[-5].low \
+                    and duan.bi_list[-1].height < duan.bi_list[-3].height \
                     and duan.bi_list[-1].atan < duan.bi_list[-3].atan:
                 return True
 
@@ -4343,20 +4342,20 @@ class CtaRenkoBar(object):
         entry_bi = cur_zs.bi_list[0]
         if entry_bi.direction != direction:
             # 找出中枢之前，与段同向得笔
-            before_bi_list = [bi for bi in cur_duan.bi_list if bi.start < entry_bi.start and bi.direction==direction]
+            before_bi_list = [bi for bi in cur_duan.bi_list if bi.start < entry_bi.start and bi.direction == direction]
             # 中枢之前得同向笔，不存在（一般不可能，因为中枢得第一笔不同向，该中枢存在与段中间)
             if len(before_bi_list) == 0:
                 return False
             entry_bi = before_bi_list[-1]
 
         # 中枢第一笔，与最后一笔，比较力度和能量
-        if entry_bi.height > cur_zs.bi_list[-1].height\
-            and entry_bi.atan > cur_zs.bi_list[-1].atan:
+        if entry_bi.height > cur_zs.bi_list[-1].height \
+                and entry_bi.atan > cur_zs.bi_list[-1].atan:
             return True
 
         return False
 
-    def is_zs_fangda(self, cur_bi_zs = None, start=False, last_bi=False):
+    def is_zs_fangda(self, cur_bi_zs=None, start=False, last_bi=False):
         """
         判断中枢，是否为放大型中枢。
         中枢放大，一般是反向力量的强烈试探导致；
@@ -4449,14 +4448,15 @@ class CtaRenkoBar(object):
         cur_zs = zs_list_inside_duan[-1]
         # 上一个中枢
         pre_zs = zs_list_inside_duan[-2]
-        bi_list_between_zs = [bi for bi in cur_duan.bi_list if bi.direction == direction and bi.end > pre_zs.end and bi.start < cur_zs.start]
-        if len(bi_list_between_zs) ==0:
+        bi_list_between_zs = [bi for bi in cur_duan.bi_list if
+                              bi.direction == direction and bi.end > pre_zs.end and bi.start < cur_zs.start]
+        if len(bi_list_between_zs) == 0:
             return False
 
         # 最后一笔，作为2个中枢间的笔
         bi_between_zs = bi_list_between_zs[-1]
 
-        bi_list_after_cur_zs = [bi for bi in cur_duan.bi_list if bi.direction==direction and bi.end > cur_zs.end]
+        bi_list_after_cur_zs = [bi for bi in cur_duan.bi_list if bi.direction == direction and bi.end > cur_zs.end]
         if len(bi_list_after_cur_zs) == 0:
             return False
 
@@ -4471,15 +4471,16 @@ class CtaRenkoBar(object):
         if bi_leave_cur_zs.start != self.bi_list[-1].start:
             return False
 
-        fx = [fx for fx in self.fenxing_list[-2:] if fx.direction==direction][-1]
+        fx = [fx for fx in self.fenxing_list[-2:] if fx.direction == direction][-1]
         if fx.is_rt:
-           return False
+            return False
 
         # 中枢间的分笔，能量大于最后分笔，形成走势背驰
         if bi_between_zs.height > bi_leave_cur_zs.height and bi_between_zs.atan > bi_leave_cur_zs.atan:
             return True
 
         return False
+
     # ----------------------------------------------------------------------
     def write_log(self, content):
         """记录CTA日志"""
@@ -4576,7 +4577,8 @@ class CtaRenkoBar(object):
             if not os.path.exists(file_name):
                 self.write_log(u'create csv file:{}'.format(file_name))
                 with open(file_name, 'a', encoding='utf8', newline='') as csvWriteFile:
-                    writer = csv.DictWriter(f=csvWriteFile, fieldnames=dict_fieldnames, dialect='excel', extrasaction='ignore')
+                    writer = csv.DictWriter(f=csvWriteFile, fieldnames=dict_fieldnames, dialect='excel',
+                                            extrasaction='ignore')
                     self.write_log(u'write csv header:{}'.format(dict_fieldnames))
                     writer.writeheader()
                     writer.writerow(dict_data)

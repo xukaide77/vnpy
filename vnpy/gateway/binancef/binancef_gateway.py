@@ -794,6 +794,7 @@ class BinancefRestApi(RestClient):
                         high_price=float(l[2]),
                         low_price=float(l[3]),
                         close_price=float(l[4]),
+                        trading_day=dt.strftime('%Y-%m-%d'),
                         gateway_name=self.gateway_name
                     )
                     buf.append(bar)
@@ -1051,12 +1052,24 @@ class BinancefDataWebsocketApi(WebsocketClient):
         tick = self.ticks[symbol]
 
         if channel == "ticker":
-            tick.volume = float(data['v'])
+            tick_dt = datetime.fromtimestamp(float(data['E']) / 1000)
+            trading_day = tick_dt.strftime('%Y-%m-%d')
+            today_volume = float(data['v'])
+            if tick.trading_day == trading_day:
+                volume_changed = max(0, today_volume - tick.volume)
+            else:
+                volume_changed = today_volume if len(tick.trading_day) > 0 else 1
+
+            tick.volume = today_volume
+            tick.last_volume = volume_changed
             tick.open_price = float(data['o'])
             tick.high_price = float(data['h'])
             tick.low_price = float(data['l'])
             tick.last_price = float(data['c'])
-            tick.datetime = datetime.fromtimestamp(float(data['E']) / 1000)
+            tick.datetime = tick_dt
+            tick.trading_day = trading_day
+            tick.date = tick.trading_day
+            tick.time = tick.datetime.strftime('%H:%M:%S.%f')
         else:
             bids = data["b"]
             for n in range(5):

@@ -121,6 +121,7 @@ class StockRpcGateway(BaseGateway):
         :param req:
         :return:
         """
+        self.write_log(f'使用prc委托:{req.__dict__}')
         ref = self.client.send_order(req, self.remote_gw_name)
 
         local_ref = ref.replace(f'{self.remote_gw_name}.', f'{self.gateway_name}.')
@@ -160,9 +161,9 @@ class StockRpcGateway(BaseGateway):
         for position in positions:
             position.gateway_name = self.gateway_name
             # 更换 vt_positionid得gateway前缀
-            position.vt_positionid.replace(f'{position.gateway_name}.', f'{self.gateway_name}.')
+            position.vt_positionid = position.vt_positionid.replace(f'{position.gateway_name}.', f'{self.gateway_name}.')
             # 更换 vt_accountid得gateway前缀
-            position.vt_accountid.replace(f'{position.gateway_name}.', f'{self.gateway_name}.')
+            position.vt_accountid = position.vt_accountid.replace(f'{position.gateway_name}.', f'{self.gateway_name}.')
 
             self.on_position(position)
         self.write_log("持仓信息查询成功")
@@ -172,9 +173,9 @@ class StockRpcGateway(BaseGateway):
             # 更换gateway
             order.gateway_name = self.gateway_name
             # 更换 vt_orderid得gateway前缀
-            order.vt_orderid.replace(f'{order.gateway_name}.', f'{self.gateway_name}.')
+            order.vt_orderid = order.vt_orderid.replace(f'{self.remote_gw_name}.', f'{self.gateway_name}.')
             # 更换 vt_accountid得gateway前缀
-            order.vt_accountid.replace(f'{order.gateway_name}.', f'{self.gateway_name}.')
+            order.vt_accountid = order.vt_accountid.replace(f'{self.remote_gw_name}.', f'{self.gateway_name}.')
 
             self.on_order(order)
         self.write_log("委托信息查询成功")
@@ -183,11 +184,11 @@ class StockRpcGateway(BaseGateway):
         for trade in trades:
             trade.gateway_name = self.gateway_name
             # 更换 vt_orderid得gateway前缀
-            trade.vt_orderid.replace(f'{trade.gateway_name}.', f'{self.gateway_name}.')
+            trade.vt_orderid = trade.vt_orderid.replace(f'{self.remote_gw_name}.', f'{self.gateway_name}.')
             # 更换 vt_orderid得gateway前缀
-            trade.vt_orderid.replace(f'{trade.gateway_name}.', f'{self.gateway_name}.')
+            trade.vt_orderid = trade.vt_orderid.replace(f'{self.remote_gw_name}.', f'{self.gateway_name}.')
             # 更换 vt_accountid得gateway前缀
-            trade.vt_accountid.replace(f'{trade.gateway_name}.', f'{self.gateway_name}.')
+            trade.vt_accountid = trade.vt_accountid.replace(f'{self.remote_gw_name}.', f'{self.gateway_name}.')
             self.on_trade(trade)
         self.write_log("成交信息查询成功")
 
@@ -208,14 +209,24 @@ class StockRpcGateway(BaseGateway):
 
         if hasattr(data, "gateway_name"):
             data.gateway_name = self.gateway_name
+
             if hasattr(data, 'vt_orderid'):
-                data.vt_orderid = data.vt_orderid.replace(f'{data.gateway_name}.', f'{self.gateway_name}.')
+                rpc_vt_orderid = data.vt_orderid.replace(f'{self.remote_gw_name}.', f'{self.gateway_name}.')
+                self.write_log(f' vt_orderid :{data.vt_orderid} => {rpc_vt_orderid}')
+                data.vt_orderid = rpc_vt_orderid
+
             if hasattr(data, 'vt_tradeid'):
-                data.vt_tradeid = data.vt_tradeid.replace(f'{data.gateway_name}.', f'{self.gateway_name}.')
+                rpc_vt_tradeid = data.vt_tradeid.replace(f'{self.remote_gw_name}.', f'{self.gateway_name}.')
+                self.write_log(f' vt_tradeid :{data.vt_tradeid} => {rpc_vt_tradeid}')
+                data.vt_tradeid = rpc_vt_tradeid
+
             if hasattr(data, 'vt_accountid'):
-                data.vt_accountid = data.vt_accountid.replace(f'{data.gateway_name}.', f'{self.gateway_name}.')
+                data.vt_accountid = data.vt_accountid.replace(f'{self.remote_gw_name}.', f'{self.gateway_name}.')
             if hasattr(data, 'vt_positionid'):
-                data.vt_positionid = data.vt_positionid.replace(f'{data.gateway_name}.', f'{self.gateway_name}.')
+                data.vt_positionid = data.vt_positionid.replace(f'{self.remote_gw_name}.', f'{self.gateway_name}.')
+
+            if event.type in [EVENT_ORDER,EVENT_TRADE]:
+                self.write_log(f'{self.remote_gw_name} => {self.gateway_name} event:{data.__dict__}')
 
         self.event_engine.put(event)
 

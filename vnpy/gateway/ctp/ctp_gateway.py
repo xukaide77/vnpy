@@ -591,6 +591,8 @@ class CtpMdApi(MdApi):
         self.userid = ""
         self.password = ""
         self.brokerid = ""
+        # 缓存tick的交易日和当前累计volume
+        self.last_ticks_info = {}  # {symbol: {'trading_dat':'xxx', volume:xxx}}
 
     def onFrontConnected(self):
         """
@@ -651,20 +653,30 @@ class CtpMdApi(MdApi):
         dt = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S.%f")
 
         # 不处理开盘前的tick数据
-        if dt.hour in [8, 20] and dt.minute <= 59:
+        if dt.hour in [7, 8, 18, 19, 20] and dt.minute <= 59:
             return
         if exchange is Exchange.CFFEX and dt.hour == 9 and dt.minute <= 29:
             return
 
+        today_volume = data["Volume"]
+        last_tick_info = self.last_ticks_info.get(symbol, {})
+        trading_day = get_trading_date(dt)
+        last_trading_day = last_tick_info.get('trading_day', None)
+        if last_trading_day == trading_day:
+            volume_changed = max(0, today_volume - last_tick_info.get('volume', 0))
+        else:
+            volume_changed = today_volume
+        self.last_ticks_info.update({symbol: {'trading_day': trading_day, 'volume': today_volume}})
         tick = TickData(
             symbol=symbol,
             exchange=exchange,
             datetime=dt,
             date=s_date,
             time=dt.strftime('%H:%M:%S.%f'),
-            trading_day=get_trading_date(dt),
+            trading_day=trading_day,
             name=symbol_name_map[symbol],
-            volume=data["Volume"],
+            volume=today_volume,
+            last_volume=volume_changed,
             open_interest=data["OpenInterest"],
             last_price=data["LastPrice"],
             limit_up=data["UpperLimitPrice"],
@@ -1014,11 +1026,11 @@ class CtpTdApi(TdApi):
         account.available = round(float(data["Available"]), 7)
         account.commission = round(float(data['Commission']), 7)
         account.margin = round(float(data['CurrMargin']), 7)
-        account.close_profit = round(float(data['CloseProfit']), 7) #+ round(
-            #float(data.get("SpecProductCloseProfit", 0)), 7)
-        account.holding_profit = round(float(data['PositionProfit']), 7) #+ round(
-            #float(data.get("SpecProductPositionProfit", 0)), 7) + round(
-            #float(data.get("SpecProductPositionProfitByAlg", 0)), 7)
+        account.close_profit = round(float(data['CloseProfit']), 7)  # + round(
+        # float(data.get("SpecProductCloseProfit", 0)), 7)
+        account.holding_profit = round(float(data['PositionProfit']), 7)  # + round(
+        # float(data.get("SpecProductPositionProfit", 0)), 7) + round(
+        # float(data.get("SpecProductPositionProfitByAlg", 0)), 7)
         account.trading_day = str(data['TradingDay'])
         if '-' not in account.trading_day and len(account.trading_day) == 8:
             account.trading_day = '-'.join(
@@ -1185,7 +1197,7 @@ class CtpTdApi(TdApi):
             trade_date = trade_date[0:4] + '-' + trade_date[4:6] + '-' + trade_date[6:8]
         trade_time = data['TradeTime']
         trade_datetime = datetime.strptime(f'{trade_date} {trade_time}', '%Y-%m-%d %H:%M:%S')
-        #print(f'raw_data:{print_dict(data)}')
+        # print(f'raw_data:{print_dict(data)}')
         # 修正 郑商所、大商所的TradeDate错误
         if exchange in [Exchange.DCE, Exchange.CZCE]:
             dt_now = datetime.now()
@@ -1201,11 +1213,11 @@ class CtpTdApi(TdApi):
                     # 星期一 =》 星期五
                     if dt_now.isoweekday() == 1:
                         trade_datetime -= timedelta(days=3)
-                        #print(f'trade time =>{trade_datetime}')
+                        # print(f'trade time =>{trade_datetime}')
                     # 星期二~星期五 =》上一天
                     else:
                         trade_datetime -= timedelta(days=1)
-                        #print(f'trade time =>{trade_datetime}')
+                        # print(f'trade time =>{trade_datetime}')
 
         tradeid = data["TradeID"]
         trade = TradeData(
@@ -1706,6 +1718,7 @@ class TdxMdApi():
             tick.low_price = float(d.get('ZuiDi', 0.0))
             tick.last_price = float(d.get('MaiChu', 0.0))
             tick.volume = int(d.get('XianLiang', 0))
+            tick.last_volume = tick.volume
             tick.open_interest = d.get('ChiCangLiang')
 
             tick.time = tick.datetime.strftime('%H:%M:%S.%f')[0:12]
@@ -1837,6 +1850,8 @@ class SubMdApi():
             d.pop('exchange', None)
             d.pop('symbol', None)
             tick.__dict__.update(d)
+            if len(tick.trading_day) == 0:
+                tick.trading_day = get_trading_date(dt)
 
             self.symbol_tick_dict[symbol] = tick
             self.gateway.on_tick(tick)
@@ -1953,6 +1968,8 @@ class TqMdApi():
 
         self.ticks = {}
 
+        self.last_ticks_info = {}
+
     def connect(self, setting):
         """"""
         try:
@@ -1973,12 +1990,27 @@ class TqMdApi():
         # 清洗 nan
         quote = {k: 0 if v != v else v for k, v in quote.items()}
         symbol, exchange = extract_vt_symbol(vt_symbol)
+        tick_dt = datetime.strptime(quote["datetime"], "%Y-%m-%d %H:%M:%S.%f")
+
+        today_volume = quote["volume"]
+        last_tick_info = self.last_ticks_info.get(symbol, {})
+        trading_day = get_trading_date(tick_dt)
+        last_trading_day = last_tick_info.get('trading_day', None)
+        if last_trading_day == trading_day:
+            volume_changed = max(0, today_volume - last_tick_info.get('volume', 0))
+        else:
+            volume_changed = today_volume
+
+        self.last_ticks_info.update({symbol: {'trading_day': trading_day, 'volume': today_volume}})
+
         tick = TickData(
             symbol=symbol,
             exchange=exchange,
-            datetime=datetime.strptime(quote["datetime"], "%Y-%m-%d %H:%M:%S.%f"),
+            datetime=tick_dt,
+            trading_day=trading_day,
             name=symbol,
-            volume=quote["volume"],
+            volume=today_volume,
+            last_volume=volume_changed,
             open_interest=quote["open_interest"],
             last_price=quote["last_price"],
             limit_up=quote["upper_limit"],
