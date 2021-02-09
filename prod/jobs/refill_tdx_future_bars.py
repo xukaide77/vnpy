@@ -59,6 +59,7 @@ if __name__ == "__main__":
             print(f'文件{bar_file_path}存在，最后时间:{start_date}')
         else:
             last_dt = None
+
             start_dt = datetime.strptime(start_date, '%Y%m%d')
             print(f'文件{bar_file_path}不存在，开始时间:{start_date}')
 

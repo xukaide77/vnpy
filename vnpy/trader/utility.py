@@ -622,6 +622,7 @@ def display_dual_axis(df, columns1, columns2=[], invert_yaxis1=False, invert_yax
     :param file_name:   保存的excel 文件名称
     :param sheet_name:  excel 的sheet
     :param image_name:  保存的image 文件名
+    颜色色系:https://www.osgeo.cn/matplotlib/tutorials/colors/colormaps.html
     :return:
     """
 
@@ -634,7 +635,7 @@ def display_dual_axis(df, columns1, columns2=[], invert_yaxis1=False, invert_yax
     fig, ax1 = plt.subplots()
     if invert_yaxis1:
         ax1.invert_yaxis()
-    ax1.plot(df1)
+    df1.plot(ax=ax1,cmap='tab20b')
 
     if len(columns2) > 0:
         df2 = df[columns2]
@@ -642,7 +643,8 @@ def display_dual_axis(df, columns1, columns2=[], invert_yaxis1=False, invert_yax
         ax2 = ax1.twinx()
         if invert_yaxis2:
             ax2.invert_yaxis()
-        ax2.plot(df2)
+        df2.plot(ax=ax2, cmap='tab20c')
+
 
     # 修改x轴得label为时间
     xt = ax1.get_xticks()

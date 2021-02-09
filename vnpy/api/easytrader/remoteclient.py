@@ -35,7 +35,8 @@ class RemoteClient:
         """
         params = locals().copy()
         params.pop("self")
-
+        # if exe_path is None:
+        #     params['exe_path'] = 'C:\\THS\\xiadan.exe'
         if config_path is not None:
             account = file2dict(config_path)
             params["user"] = account["user"]

@@ -2003,7 +2003,7 @@ class BackTestingEngine(object):
             # 计算每个策略实例的持仓盈亏
             strategy_pnl.update({longpos.strategy_name: strategy_pnl.get(longpos.strategy_name, 0) + holding_profit})
 
-            positionMsg += "{},long,p={},v={},m={};".format(symbol, longpos.price, longpos.volume, holding_profit)
+            positionMsg += "{:<10},long ,p:{:<10},vol:{:<3},pnl:{};\n".format(symbol, round(longpos.price,3), longpos.volume, round(holding_profit,3))
 
         for shortpos in self.short_position_list:
             # 不计算套利合约的持仓盈亏
@@ -2023,7 +2023,7 @@ class BackTestingEngine(object):
             # 计算每个策略实例的持仓盈亏
             strategy_pnl.update({shortpos.strategy_name: strategy_pnl.get(shortpos.strategy_name, 0) + holding_profit})
 
-            positionMsg += "{},short,p={},v={},m={};".format(symbol, shortpos.price, shortpos.volume, holding_profit)
+            positionMsg += "{:<10},short,p:{:<10},vol:{:<3},pnl:{};\n".format(symbol, round(shortpos.price,3), shortpos.volume, round(holding_profit,3))
 
         data['net'] = c + today_holding_profit  # 当日净值（含持仓盈亏）
         data['rate'] = (c + today_holding_profit) / self.init_capital
@@ -2049,7 +2049,7 @@ class BackTestingEngine(object):
             self.daily_max_drawdown_rate = drawdown_rate
             self.max_drawdown_rate_time = data['date']
 
-        msg = u'{}:  net={}, capital={} max={} holding_profit={} commission={}， pos: {}' \
+        msg = u'{}:  net={}, capital={} max={} holding_profit={} commission={}， pos: \n{}' \
             .format(data['date'],
                     data['net'], c, m,
                     today_holding_profit,
@@ -2143,6 +2143,7 @@ class BackTestingEngine(object):
         d = {}
         d['init_capital'] = self.init_capital
         d['profit'] = self.cur_capital - self.init_capital
+        d['net_capital'] = self.net_capital
         d['max_capital'] = self.max_net_capital  # 取消原 maxCapital
 
         if len(self.pnl_list) == 0:
@@ -2223,8 +2224,11 @@ class BackTestingEngine(object):
         result_info.update({u'期初资金': d['init_capital']})
         self.output(u'期初资金：\t%s' % format_number(d['init_capital']))
 
-        result_info.update({u'总盈亏': d['profit']})
-        self.output(u'总盈亏：\t%s' % format_number(d['profit']))
+        result_info.update({u'期末资金': d['net_capital']})
+        self.output(u'期末资金：\t%s' % format_number(d['net_capital']))
+
+        result_info.update({u'平仓盈亏': d['profit']})
+        self.output(u'平仓盈亏：\t%s' % format_number(d['profit']))
 
         result_info.update({u'资金最高净值': d['max_capital']})
         self.output(u'资金最高净值：\t%s' % format_number(d['max_capital']))

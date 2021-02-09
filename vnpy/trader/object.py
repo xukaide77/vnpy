@@ -43,10 +43,10 @@ class TickData(BaseData):
     trading_day: str = ""  # '%Y-%m-%d'
 
     name: str = ""
-    volume: float = 0
+    volume: float = 0   # 当前交易日累计成交量
     open_interest: float = 0
     last_price: float = 0
-    last_volume: float = 0
+    last_volume: float = 0  # 当前切片的成交量
     limit_up: float = 0
     limit_down: float = 0
 

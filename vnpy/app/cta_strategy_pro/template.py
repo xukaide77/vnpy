@@ -713,7 +713,11 @@ class CtaProTemplate(CtaTemplate):
                         cb_on_bar = strategy_kline.cb_on_bar
                         # 缓存实例数据 =》 当前实例数据
                         strategy_kline.__dict__.update(cache_kline.__dict__)
-
+                        kline_first_bar_dt = None
+                        kline_last_bar_dt = None
+                        if len(strategy_kline.line_bar) > 0:
+                            kline_first_bar_dt = strategy_kline.line_bar[0].datetime
+                            kline_last_bar_dt = strategy_kline.line_bar[-1].datetime
                         # 所有K线的最后时间
                         if last_bar_dt and strategy_kline.cur_datetime:
                             last_bar_dt = max(last_bar_dt, strategy_kline.cur_datetime)
@@ -724,7 +728,7 @@ class CtaProTemplate(CtaTemplate):
                         strategy_kline.strategy = self
                         strategy_kline.cb_on_bar = cb_on_bar
 
-                        self.write_log(f'恢复{kline_name}缓存数据,最新bar结束时间:{last_bar_dt}')
+                        self.write_log(f'恢复{kline_name}缓存数据:[{kline_first_bar_dt}] => [{kline_last_bar_dt}], bar结束时间:{last_bar_dt}')
 
                 self.write_log(u'加载缓存k线数据完毕')
                 return last_bar_dt
@@ -1880,7 +1884,7 @@ class CtaProFutureTemplate(CtaProTemplate):
                         elif order_info['traded'] > 0:
                             self.write_log('撤单逻辑 = > 部分开仓')
                             if order_grid.traded_volume < order_info['traded']:
-                                self.write_log('撤单逻辑 = > 调整网格开仓数 {} => {}'.format(order_grid.traded_volume, order_grid['traded'] ))
+                                self.write_log('撤单逻辑 = > 调整网格开仓数 {} => {}'.format(order_grid.traded_volume, order_info['traded'] ))
                                 order_grid.traded_volume = order_info['traded']
                             self.write_log(f'撤单逻辑 => 调整网格委托状态=> False, 开仓状态:True, 开仓数量:{order_grid.volume}=>{order_grid.traded_volume}')
                             order_grid.order_status = False

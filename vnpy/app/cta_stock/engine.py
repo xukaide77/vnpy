@@ -279,9 +279,10 @@ class CtaEngine(BaseEngine):
 
         strategy = self.orderid_strategy_map.get(order.vt_orderid, None)
         if not strategy:
-            self.write_log(f'委托单没有对应的策略设置:order:{order}')
+            self.write_log(f'委托单没有对应的策略设置:order:{order.__dict__}')
+            self.write_log(f'当前策略侦听委托单:{list(self.orderid_strategy_map.keys())}')
             return
-
+        self.write_log(f'委托更新:{order.vt_orderid} => 策略:{strategy.strategy_name}')
         # Remove vt_orderid if order is no longer active.
         vt_orderids = self.strategy_orderid_map[strategy.strategy_name]
         if order.vt_orderid in vt_orderids and not order.is_active():
@@ -311,14 +312,17 @@ class CtaEngine(BaseEngine):
 
         # Filter duplicate trade push
         if trade.vt_tradeid in self.vt_tradeids:
-            self.write_log(f'成交单的委托编号不属于本引擎实例:{trade}')
+            self.write_log(f'成交单的交易编号{trade.vt_tradeid}已处理完毕,不再处理')
             return
         self.vt_tradeids.add(trade.vt_tradeid)
 
         strategy = self.orderid_strategy_map.get(trade.vt_orderid, None)
         if not strategy:
-            self.write_log(f'成交单没有对应的策略设置:order:{trade}')
+            self.write_log(f'成交单没有对应的策略设置:trade:{trade.__dict__}')
+            self.write_log(f'当前策略侦听委托单:{list(self.orderid_strategy_map.keys())}')
             return
+
+        self.write_log(f'成交更新:{trade.vt_orderid} => 策略:{strategy.strategy_name}')
 
         # Update strategy pos before calling on_trade method
         # 取消外部干预策略pos，由策略自行完成更新
@@ -512,13 +516,10 @@ class CtaEngine(BaseEngine):
         vt_orderid = self.main_engine.send_order(
             req, gateway_name)
 
-        # Check if sending order successful
-        if not vt_orderid:
-            vt_orderids
-
         vt_orderids.append(vt_orderid)
 
         # Save relationship between orderid and strategy.
+        self.write_log(f'委托成功绑定{vt_orderid} <==> {strategy.strategy_name}')
         self.orderid_strategy_map[vt_orderid] = strategy
         self.strategy_orderid_map[strategy.strategy_name].add(vt_orderid)
 
@@ -874,7 +875,7 @@ class CtaEngine(BaseEngine):
     def get_account(self, vt_accountid: str = ""):
         """ 查询账号的资金"""
         # 如果启动风控，则使用风控中的最大仓位
-        if self.main_engine.rm_engine:
+        if self.main_engine.rm_engine and len(vt_accountid) > 0:
             return self.main_engine.rm_engine.get_account(vt_accountid)
 
         if len(vt_accountid) > 0:

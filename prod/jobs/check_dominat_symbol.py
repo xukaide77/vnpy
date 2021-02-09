@@ -29,7 +29,7 @@ if __name__ == "__main__":
         cta_path = os.path.abspath(os.path.join(vnpy_root, account_folder))
         if not os.path.exists(cta_path):
             print(f'{cta_path}不存在', file=sys.stderr)
-            exit()
+            continue
         print(f'开始检查{cta_path}下的策略运行配置文件')
         account_name = account_folder.split('/')[-1]
         # 创建API对象

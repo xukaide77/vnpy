@@ -1,5 +1,6 @@
 import json
 import logging
+import gzip
 import socket
 import ssl
 import sys
@@ -197,19 +198,21 @@ class WebsocketClient:
                     self._ensure_connection()
                     ws = self._ws
                     if ws:
-                        text = ws.recv()
+                        recv_data = ws.recv()
 
                         # ws object is closed when recv function is blocking
-                        if not text:
+                        if not recv_data:
                             self._disconnect()
                             continue
 
-                        self._record_last_received_text(text)
+                        self._record_last_received_text(recv_data)
 
                         try:
-                            data = self.unpack_data(text)
+                            if isinstance(recv_data, bytes):
+                                recv_data = gzip.decompress(recv_data)
+                            data = self.unpack_data(recv_data)
                         except ValueError as e:
-                            print("websocket unable to parse data: " + text)
+                            print("websocket unable to parse data: " + recv_data)
                             raise e
 
                         self._log('recv data: %s', data)

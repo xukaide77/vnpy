@@ -199,7 +199,7 @@ class CtaLineBar(object):
         self.mid5_array[:] = np.nan
         # 导出到CSV文件 的目录名 和 要导出的 字段
         self.export_filename = None  # 数据要导出的目标文件夹
-        self.export_fields = []      # 定义要导出的K线数据字段（包含K线元素，主图指标，附图指标等）
+        self.export_fields = []  # 定义要导出的K线数据字段（包含K线元素，主图指标，附图指标等）
         self.export_bi_filename = None  # 通过唐其安通道输出得笔csv文件(不是缠论得笔)
         self.export_zs_filename = None  # 通过唐其安通道输出的中枢csv文件（不是缠论的笔中枢）
 
@@ -654,6 +654,7 @@ class CtaLineBar(object):
         self.dict_dif = {}  # datetime str: dif mapping
         self.line_dea = []  # DEA = （前一日DEA X 8/10 + 今日DIF X 2/10），即为talib-MACD返回值
         self.line_macd = []  # (dif-dea)*2，但是talib中MACD的计算是bar = (dif-dea)*1,国内一般是乘以2
+        self.dict_macd = {}  # datetime str: macd mapping
         self.macd_segment_list = []  # macd 金叉/死叉的段列表，记录价格的最高/最低，Dif的最高，最低，Macd的最高/最低，Macd面接
         self._rt_dif = None
         self._rt_dea = None
@@ -940,6 +941,7 @@ class CtaLineBar(object):
         if self.bar_len > self.max_hold_bars:
             del self.line_bar[0]
             self.dict_dif.pop(self.index_list[0], None)
+            self.dict_macd.pop(self.index_list[0], None)
             del self.index_list[0]
             self.bar_len = self.bar_len - 1  # 删除了最前面的bar，bar长度少一位
 
@@ -1256,13 +1258,13 @@ class CtaLineBar(object):
 
         # K线的日期时间
         self.cur_bar.trading_day = tick.trading_day  # K线所在的交易日期
-        #self.cur_bar.date = tick.date  # K线的日期，（夜盘的话，与交易日期不同哦）
+        # self.cur_bar.date = tick.date  # K线的日期，（夜盘的话，与交易日期不同哦）
         self.cur_bar.datetime = tick.datetime
         if (self.interval == Interval.SECOND and self.bar_interval % 60 == 0) \
                 or self.interval in [Interval.MINUTE, Interval.HOUR, Interval.DAILY, Interval.WEEKLY]:
             # K线的日期时间（去除秒）设为第一个Tick的时间
             self.cur_bar.datetime = self.cur_bar.datetime.replace(second=0, microsecond=0)
-        #self.cur_bar.time = self.cur_bar.datetime.strftime('%H:%M:%S')
+        # self.cur_bar.time = self.cur_bar.datetime.strftime('%H:%M:%S')
         self.cur_bar.volume = tick.last_volume if tick.last_volume > 0 else tick.volume
         if self.cur_trading_day != self.cur_bar.trading_day or not self.line_bar:
             # bar的交易日与记录的当前交易日不一致：
@@ -1784,7 +1786,7 @@ class CtaLineBar(object):
         # 当前笔 不是中枢最后一笔， 方向是回归中枢的
         else:
             # 向下的一笔，且回落中枢高位下方，变成中枢的最后一笔
-            if direction == -1 and cur_bi.get('low') < self.cur_tqn_zs.get('high')\
+            if direction == -1 and cur_bi.get('low') < self.cur_tqn_zs.get('high') \
                     and cur_bi.get('high') > self.cur_tqn_zs.get('low'):
                 # 对比中枢之前所有的确认低点，不能超过
                 zs_lows = self.cur_tqn_zs.get("lows", [self.cur_tqn_zs.get('low')])
@@ -1814,7 +1816,7 @@ class CtaLineBar(object):
                     self.cur_tqn_zs.update({"end": cur_bi.get("start")})
 
             # 向上的一笔，回抽中枢下轨上方，变成中枢的一笔
-            if direction == 1 and cur_bi.get('high') > self.cur_tqn_zs.get('low')\
+            if direction == 1 and cur_bi.get('high') > self.cur_tqn_zs.get('low') \
                     and cur_bi.get('low') < self.cur_tqn_zs.get('high'):
                 # 对比中枢之前所有的确认高点，不能超过
                 zs_highs = self.cur_tqn_zs.get("highs", [self.cur_tqn_zs.get('high')])
@@ -3753,15 +3755,19 @@ class CtaLineBar(object):
             del self.line_dif[0]
         dif = round(dif_list[-1], self.round_n)
         self.line_dif.append(dif)
-        if len(self.index_list) > 0:
-            self.dict_dif.update({self.index_list[-1]: dif})
+
         if len(self.line_dea) > self.max_hold_bars:
             del self.line_dea[0]
         self.line_dea.append(round(dea_list[-1], self.round_n))
 
+        macd = round(macd_list[-1] * 2, self.round_n)
         if len(self.line_macd) > self.max_hold_bars:
             del self.line_macd[0]
-        self.line_macd.append(round(macd_list[-1] * 2, self.round_n))  # 国内一般是2倍
+        self.line_macd.append(macd)  # 国内一般是2倍
+
+        if len(self.index_list) > 0:
+            self.dict_dif.update({self.index_list[-1]: dif})
+            self.dict_macd.update({self.index_list[-1]: macd})
 
         # 更新 “段”（金叉-》死叉；或 死叉-》金叉)
         segment = self.macd_segment_list[-1] if len(self.macd_segment_list) > 0 else {}
@@ -3889,7 +3895,11 @@ class CtaLineBar(object):
 
     # 通过bar的时间，获取dif值
     def get_dif_by_dt(self, str_dt):
-        return self.dict_dif.get(str_dt, 0)
+        return self.dict_dif.get(str_dt, None)
+
+    # 通过bar的时间，获取macd值
+    def get_macd_by_dt(self, str_dt):
+        return self.dict_macd.get(str_dt, None)
 
     @property
     def rt_dif(self):
@@ -5390,6 +5400,15 @@ class CtaLineBar(object):
     #         self.__count_chanlun()
     #     return self._duan_zs_list
 
+    def is_duan(self, direction):
+        """当前最新一线段，是否与输入方向一致"""
+        if isinstance(direction, Direction):
+            direction = 1 if direction == Direction.LONG else -1
+        if len(self.duan_list) == 0:
+            return False
+
+        return self.duan_list[-1].direction == direction
+
     def is_bi_beichi_inside_duan(self, direction, cur_duan=None):
         """
         当前段内的笔，是否形成背驰
@@ -5402,7 +5421,7 @@ class CtaLineBar(object):
             direction = 1 if direction == Direction.LONG else -1
 
         if cur_duan is None:
-            if len(self._duan_list) == 0:
+            if len(self.duan_list) == 0:
                 return False
 
             # 分型需要确认
@@ -5410,7 +5429,7 @@ class CtaLineBar(object):
                 return False
 
             # 取当前段
-            cur_duan = self._duan_list[-1]
+            cur_duan = self.duan_list[-1]
             # 获取最近2个匹配direction的分型
             fx_list = [fx for fx in self._fenxing_list[-4:] if fx.direction == direction]
             if len(fx_list) != 2:
@@ -5450,51 +5469,57 @@ class CtaLineBar(object):
 
         return False
 
-    def is_fx_macd_divergence(self, direction):
+    def is_fx_macd_divergence(self, direction, cur_duan=None, use_macd=False):
         """
         分型的macd背离
         :param direction: 1，-1 或者 Direction.LONG（判断是否顶背离）, Direction.SHORT（判断是否底背离）
-
+        : cur_duan 当前段
+        : use_macd 使用macd红柱，绿柱进行比较
         :return:
         """
         if isinstance(direction, Direction):
             direction = 1 if direction == Direction.LONG else -1
-        if len(self._duan_list) == 0:
-            return False
-        # 当前段
-        duan = self._duan_list[-1]
+        if cur_duan is None:
 
-        if duan.direction != direction:
+            if len(self.duan_list) == 0:
+                return False
+            # 当前段
+            cur_duan = self.duan_list[-1]
+
+            # 获取最近2个匹配direction的分型
+            fx_list = [fx for fx in self._fenxing_list[-4:] if fx.direction == direction]
+            if len(fx_list) != 2:
+                return False
+
+            # 这里是排除段的信号出错，获取了很久之前的一段，而不是最新的一段
+            if cur_duan.end < fx_list[0].index:
+                return False
+
+        if cur_duan.direction != direction:
             return False
 
         # 当前段包含的分笔，必须大于3
-        if len(duan.bi_list) <= 3:
+        if len(cur_duan.bi_list) < 3:
             return False
 
-        # 获取最近2个匹配direction的分型
-        fx_list = [fx for fx in self._fenxing_list[-4:] if fx.direction == direction]
-        if len(fx_list) != 2:
-            return False
-
-        # 这里是排除段的信号出错，获取了很久之前的一段，而不是最新的一段
-        if duan.end < fx_list[0].index:
-            return False
-
-        pre_dif = self.get_dif_by_dt(fx_list[0].index)
-        cur_dif = self.get_dif_by_dt(fx_list[1].index)
-        if pre_dif is None or cur_dif is None:
+        # 获取倒数第二根同向分笔的结束dif值或macd值
+        pre_value = self.get_macd_by_dt(cur_duan.bi_list[-3].end) if use_macd else self.get_dif_by_dt(
+            cur_duan.bi_list[-3].end)
+        cur_value = self.get_macd_by_dt(cur_duan.bi_list[-1].end) if use_macd else self.get_dif_by_dt(
+            cur_duan.bi_list[-1].end)
+        if pre_value is None or cur_value is None:
             return False
         if direction == 1:
             # 前顶分型顶部价格
-            pre_price = fx_list[0].high
+            pre_price = cur_duan.bi_list[-3].high
             # 当前顶分型顶部价格
-            cur_price = fx_list[1].high
-            if pre_price < cur_price and pre_dif >= cur_dif and 0 < self.line_dif[-1] < self.line_dif[-2]:
+            cur_price = cur_duan.bi_list[-1].high
+            if pre_price < cur_price and pre_value >= cur_value > 0:
                 return True
         else:
-            pre_price = fx_list[0].low
-            cur_price = fx_list[1].low
-            if pre_price > cur_price and pre_dif <= cur_dif and self.line_dif[-2] < self.line_dif[-1] < 0:
+            pre_price = cur_duan.bi_list[-3].low
+            cur_price = cur_duan.bi_list[-1].low
+            if pre_price > cur_price and pre_value <= cur_value < 0:
                 return True
 
         return False
@@ -6511,7 +6536,7 @@ class CtaMinuteBar(CtaLineBar):
         is_new_bar = False
 
         # 不在同一交易日，推入新bar
-        if len(tick.trading_day) > 0 and  len(self.cur_trading_day) > 0 and self.cur_trading_day != tick.trading_day:
+        if len(tick.trading_day) > 0 and len(self.cur_trading_day) > 0 and self.cur_trading_day != tick.trading_day:
             # self.write_log('{} drawLineBar() new_bar,{} curTradingDay:{},tick.trading_day:{} bars_count={}'
             #                 .format(self.name, tick.datetime.strftime("%Y-%m-%d %H:%M:%S"), self.cur_trading_day,
             #                         tick.trading_day, self.bars_count))

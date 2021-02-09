@@ -2143,7 +2143,7 @@ class CtaSpotTemplate(CtaTemplate):
                        .format(self.cur_datetime, self.vt_symbol, self.cur_price, self.entrust))
 
         if len(self.active_orders) > 0:
-            self.write_log('当前活动订单:{}'.format(json.dumps(self.active_orders, indent=2, ensure_ascii=False)))
+            self.write_log('当前活动订单数:{}'.format(len(self.active_orders))) #json.dumps(self.active_orders, indent=2, ensure_ascii=False)))
 
         if hasattr(self, 'policy'):
             policy = getattr(self, 'policy')
