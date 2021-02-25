@@ -129,6 +129,61 @@ def convert_cffex_symbol(mi_symbol):
 
     return f'{underly_symbol}{next_year_month}'
 
+def get_pre_switch_mi_symbol(d):
+    """
+    根据配置，获取提前换月得主力合约
+    例如， 主力合约和次主力合约相差30%，即可返回次主力合约
+    :param d:{
+        "underlying_symbol": "RB",
+        "mi_symbol": "rb2105",
+        "full_symbol": "RB2105",
+        "exchange": "SHFE",
+        "margin_rate": 0.1,
+        "symbol_size": 10,
+        "price_tick": 1.0,
+        "open_interesting": 1264478,
+        "symbols": {
+            "RB2103": 9974,
+            "RB2104": 10404,
+            "RB2105": 1264478,
+            "RB2106": 63782,
+            "RB2107": 76065,
+            "RB2108": 19033,
+            "RB2109": 25809,
+            "RB2110": 318754,
+            "RB2111": 101,
+            "RB2112": 154,
+            "RB2201": 31221,
+            "RB2202": 51
+        }
+    }
+    :return:
+    """
+    full_symbol = d.get('full_symbol')
+    mi_symbol = d.get('mi_symbol')
+    symbols = d.get('symbols')
+    vn_exchange = Exchange(d.get('exchange'))
+    if vn_exchange in [Exchange.CFFEX]:
+        return mi_symbol
+
+    # 根据持仓量排倒序
+    sorted_symbols = [(k,v) for k, v in sorted(symbols.items(), key=lambda item: item[1], reverse=True)]
+    if len(sorted_symbols) < 2:
+        return mi_symbol
+    # 主力、次主力
+    s1, s2 = sorted_symbols[:2]
+    # 次主力合约是旧合约
+    if s1[0] > s2[0]:
+        return mi_symbol
+    # 次主力合约超过主力合约得80%
+    if s1[1] * 0.8 < s2[1]:
+        next_full_symbol = s2[0]
+
+        # 根据合约全路径、交易所 => 真实合约
+        next_mi_symbol = get_real_symbol_by_exchange(next_full_symbol, vn_exchange)
+        return next_mi_symbol
+    return mi_symbol
+
 
 class TdxFutureData(object):
     exclude_ips = []
@@ -622,8 +677,8 @@ class TdxFutureData(object):
                 self.write_log(f'移除旧版symbols列表')
                 cache_symbols = {}
 
-            # 获取 {合约:总量}
-            new_symbols = {c.get('code'): c.get('ZongLiang') for c in v}
+            # 获取 {合约:总量}ChiCangLiang
+            new_symbols = {c.get('code'): c.get('ChiCangLiang') for c in v}
             # 更新字典
             cache_symbols.update(new_symbols)
 

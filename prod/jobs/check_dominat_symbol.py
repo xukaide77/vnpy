@@ -79,8 +79,14 @@ if __name__ == "__main__":
             new_mi_symbol = contract_info.get('mi_symbol')
             new_exchange = contract_info.get('exchange')
 
+            # 提前计算满足条件得次主力合约
+            next_mi_symbol = get_pre_switch_mi_symbol(contract_info)
+            if next_mi_symbol > new_mi_symbol:
+                print(f'使用提前切换得次主力合约{new_mi_symbol} => {next_mi_symbol}')
+                next_mi_symbol = new_mi_symbol
+
             new_vt_symbol = '.'.join([new_mi_symbol, new_exchange])
-            new_full_symbol = contract_info.get('full_symbol', '').upper()
+            new_full_symbol =get_full_symbol(new_mi_symbol).upper()
             if full_symbol >= new_full_symbol:
                 print(f'{account_name}策略配置：长合约{full_symbol}， 主力长合约{new_full_symbol}，不更新')
                 continue
