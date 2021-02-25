@@ -191,9 +191,12 @@ class TdxFutureData(object):
                         if last_datetime_str:
                             try:
                                 last_datetime = datetime.strptime(last_datetime_str, '%Y-%m-%d %H:%M:%S')
-                                if (datetime.now() - last_datetime).total_seconds() > 60 * 60 * 2:
+                                ip = self.best_ip.get('ip')
+                                is_bad_ip = ip and ip in self.best_ip.get('exclude_ips',[])
+                                if (datetime.now() - last_datetime).total_seconds() > 60 * 60 * 2 or is_bad_ip :
                                     self.best_ip = {}
-                                    self.exclude_ips = []
+                                    if not is_bad_ip:
+                                        self.exclude_ips = []
                             except Exception as ex:  # noqa
                                 self.best_ip = {}
                         else:

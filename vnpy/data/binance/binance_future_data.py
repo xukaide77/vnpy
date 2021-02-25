@@ -152,6 +152,43 @@ class BinanceFutureData(RestClient):
 
         return bars
 
+    def get_fund_rate(self, symbol=""):
+
+        params = {}
+        if symbol:
+            params.update({"symbol": symbol})
+
+        # Get response from server
+        resp = self.request(
+            "GET",
+            "/fapi/v1/premiumIndex",
+            data={},
+            params=params
+        )
+
+        # Break if request failed with other status code
+        if resp.status_code // 100 != 2:
+            msg = f"获取资费失败，状态码：{resp.status_code}，信息：{resp.text}"
+            self.write_log(msg)
+            return {} if symbol else []
+        else:
+            datas = resp.json()
+            if not datas:
+                msg = f"获取资费为空"
+                self.write_log(msg)
+                return {} if symbol else []
+
+            if isinstance(datas, list):
+                for d in datas:
+                    for k in list(d.keys()):
+                        if k in ['nextFundingTime', 'time']:
+                            d.update({k: datetime.fromtimestamp(d.get(k) / 1000).strftime('%Y-%m-%d %H:%M:%S')})
+            elif isinstance(datas, dict):
+                for k in list(datas.keys()):
+                    if k in ['nextFundingTime', 'time']:
+                        datas.update({k: datetime.fromtimestamp(datas.get(k) / 1000).strftime('%Y-%m-%d %H:%M:%S')})
+            return datas
+
     def export_to(self, bars, file_name):
         """导出bar到文件"""
         if len(bars) == 0:
@@ -201,7 +238,7 @@ class BinanceFutureData(RestClient):
                     "name": name,
                     "price_tick": pricetick,
                     "symbol_size": 20,
-                    "margin_rate": round(float(d['requiredMarginPercent']) / 100, 5),
+                    "margin_rate" : round(float(d['requiredMarginPercent']) / 100,5),
                     "min_volume": min_volume,
                     "product": Product.FUTURES.value,
                     "commission_rate": 0.005
@@ -217,6 +254,7 @@ class BinanceFutureData(RestClient):
         f = os.path.abspath(os.path.join(os.path.dirname(__file__), 'future_contracts.json'))
         contracts = load_json(f, auto_save=False)
         return contracts
+
 
     def save_contracts(self):
         """保存合约配置"""

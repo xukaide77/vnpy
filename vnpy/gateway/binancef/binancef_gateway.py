@@ -60,7 +60,8 @@ STATUS_BINANCEF2VT: Dict[str, Status] = {
 
 ORDERTYPE_VT2BINANCEF: Dict[OrderType, str] = {
     OrderType.LIMIT: "LIMIT",
-    OrderType.MARKET: "MARKET"
+    OrderType.MARKET: "MARKET",
+    OrderType.STOP: "STOP_MARKET"
 }
 ORDERTYPE_BINANCEF2VT: Dict[str, OrderType] = {v: k for k, v in ORDERTYPE_VT2BINANCEF.items()}
 
@@ -172,7 +173,7 @@ class BinancefGateway(BaseGateway):
             self.status.update({'con': True})
 
         self.count += 1
-        if self.count < 2:
+        if self.count < 60:
             return
         self.count = 0
         if len(self.query_functions) > 0:

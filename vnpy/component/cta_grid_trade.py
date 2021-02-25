@@ -854,7 +854,7 @@ class CtaGridTrade(CtaComponent):
                 except Exception:
                     pass
 
-    def save(self):
+    def save(self, **kwargs):
         """
         保存网格至本地Json文件
         2017/11/23 update: 保存时，空的列表也保存
@@ -865,7 +865,9 @@ class CtaGridTrade(CtaComponent):
             return
 
         # 更新开仓均价
-        self.recount_avg_open_price()
+        if not kwargs.get('count_avg_price', True):
+            self.recount_avg_open_price()
+
         grids_save_path = get_folder_path('data')
 
         # 确保json名字与策略一致
@@ -893,7 +895,7 @@ class CtaGridTrade(CtaComponent):
 
         self.write_log(u'GrideTrade保存文件{}完成'.format(grid_json_file))
 
-    def load(self, direction, open_status_filter=[]):
+    def load(self, direction, open_status_filter=[], **kwargs):
         """
         加载本地Json至网格
         :param direction: Direction.SHORT,做空网格；Direction.LONG，做多网格
@@ -950,7 +952,8 @@ class CtaGridTrade(CtaComponent):
             grids.append(grid)
 
         # 更新开仓均价
-        self.recount_avg_open_price()
+        if not kwargs.get('count_avg_price',True):
+            self.recount_avg_open_price()
         return grids
 
     def change_strategy_name(self, old_name, new_name):

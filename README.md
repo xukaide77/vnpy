@@ -16,14 +16,14 @@ gitee  链接： https://gitee.com/vnpy2/vnpy
         + 直接使用，无需pip install easytrader；
         + 任然需要安装组件 pip install -r vnpy/api/easytrader/requirement.txt
     - vnpy.gateway.gj 国金证券的gateway
-        + 使用了tdx作为股票基础数据
-        + 使用了天勤作为行情服务
+        + 使用了t.d.x作为股票基础数据
+        + 使用了天.勤.作为行情服务
         + 使用了easytrader的remote_client作为接入.
     - prod.stock_qj 运行例子
         + run_es_restful_server.py 放在A机器，安装国金全能客户端。
         + run_main_gj01.py 放在B机器，运行vn_trader客户端
         
-15、天勤行情接入
+15、天.勤.行情接入
     
     - vnpy.data.tq 定制downloder，扩展下载字段
     - prod.jobs.refill_tq_future.ticks， 下载tick
@@ -113,7 +113,7 @@ gitee  链接： https://gitee.com/vnpy2/vnpy
 
     
     - 提供指数行情订阅
-    - 使用RabbitMQ指数源，或tdx单一数据源    
+    - 使用RabbitMQ指数源，或t.d.x单一数据源    
     - 提供自定义合约功能，实时提供其合成后的tick行情
     - 增加天勤行情，实现上期所5档行情和指数行情
         
@@ -124,8 +124,7 @@ gitee  链接： https://gitee.com/vnpy2/vnpy
 4、 增加App: tick_recorder, 直接异步写入csv文件
 
 
-3、 增加tdx 免费数据源,包括
-
+3、 增加t.d.x 免费数据源,包括
     
      - 提供主力合约/指数合约的信息获取
      - 提供期货/股票数据bar 和分笔成交数据下载

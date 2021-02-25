@@ -608,10 +608,10 @@ def save_images_to_excel(file_name, sheet_name, image_names):
         print(u'save_images_to_excel exception:{}'.format(str(ex)), traceback.format_exc(), file=sys.stderr)
         return False
 
-
 def display_dual_axis(df, columns1, columns2=[], invert_yaxis1=False, invert_yaxis2=False, file_name=None,
                       sheet_name=None,
-                      image_name=None):
+                      image_name=None,
+                      label_column='index'):
     """
     显示(保存)双Y轴的走势图
     :param df: DataFrame
@@ -622,6 +622,7 @@ def display_dual_axis(df, columns1, columns2=[], invert_yaxis1=False, invert_yax
     :param file_name:   保存的excel 文件名称
     :param sheet_name:  excel 的sheet
     :param image_name:  保存的image 文件名
+    :param label_cloumn: 显示在x轴的label所在字段，例如 df的index，或者 'datetime'
     颜色色系:https://www.osgeo.cn/matplotlib/tutorials/colors/colormaps.html
     :return:
     """
@@ -648,7 +649,8 @@ def display_dual_axis(df, columns1, columns2=[], invert_yaxis1=False, invert_yax
 
     # 修改x轴得label为时间
     xt = ax1.get_xticks()
-    xt2 = [df.index[int(i)] for i in xt[1:-2]]
+    label_values = df.index.values if label_column == 'index' else df[label_column].values
+    xt2 = [label_values[int(i)] for i in xt[1:-2]]
     xt2.insert(0, '')
     xt2.append('')
     ax1.set_xticklabels(xt2)
