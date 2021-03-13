@@ -23,7 +23,7 @@ conda create -name py37=python3.7
     
     解决：    
     sudo find / -name libta_lib.so.0    
-    /home/ai/eco-ta/ta-lib/src/.libs/libta_lib.so.0    
+    /home/trade/ta-lib/src/.libs/libta_lib.so.0    
     /usr/local/lib/libta_lib.so.0    
     vi /etc/profile    
     添加    

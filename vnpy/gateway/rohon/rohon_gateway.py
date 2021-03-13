@@ -357,6 +357,10 @@ class RohonGateway(BaseGateway):
             return False
 
         if not self.td_api.connect_status or self.md_api.connect_status:
+            if not self.td_api.connect_status:
+                self.write_error(f'交易服务器连接断开')
+            if not self.md_api.connect_status:
+                self.write_error(f'行情服务器连接断开')
             return False
 
         return True
@@ -572,7 +576,8 @@ class RohonMdApi(MdApi):
         Callback when front server is disconnected.
         """
         self.login_status = False
-        self.gateway.write_log(f"行情服务器连接断开，原因{reason}")
+        self.connect_status = False
+        self.gateway.write_error(f"行情服务器连接断开，原因{reason}")
         self.gateway.status.update({'md_con': False, 'md_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
     def onRspUserLogin(self, data: dict, error: dict, reqid: int, last: bool):
@@ -690,6 +695,7 @@ class RohonMdApi(MdApi):
             self.init()
 
             self.connect_status = True
+
         # If already connected, then login immediately.
         elif not self.login_status:
             self.login()
@@ -773,8 +779,8 @@ class RohonTdApi(TdApi):
     def onFrontDisconnected(self, reason: int):
         """"""
         self.login_status = False
-        self.gateway.write_log(f"交易服务器连接断开，原因{reason}")
-        self.gateway.status.update({'td_con': True, 'td_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+        self.gateway.write_error(f"交易服务器连接断开，原因{reason}")
+        self.gateway.status.update({'td_con': False, 'td_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
     def onRspAuthenticate(self, data: dict, error: dict, reqid: int, last: bool):
         """"""

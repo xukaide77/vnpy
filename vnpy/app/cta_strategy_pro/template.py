@@ -904,6 +904,11 @@ class CtaProTemplate(CtaTemplate):
 
             order_time = order_info.get('order_time')
             over_ms = (dt - order_time).total_seconds()
+
+            # 白天开盘或许有指数与真实tick的时间延迟，这个时刻不做撤单功能
+            if f'{dt.hour}:{dt.minute}' in ['10:30', '13:30']:
+                continue
+
             if (over_ms > self.cancel_seconds) \
                     or force:  # 超过设置的时间还未成交
                 self.write_log(f'{dt}, 超时{over_ms}秒未成交，取消委托单：{order_info}')

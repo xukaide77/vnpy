@@ -220,14 +220,20 @@ class CtaEngine(BaseEngine):
 
     def process_timer_event(self, event: Event):
         """ 处理定时器事件"""
+
         all_trading = True
+        dt = datetime.now()
+
         # 触发每个策略的定时接口
         for strategy in list(self.strategies.values()):
             strategy.on_timer()
             if not strategy.trading:
                 all_trading = False
 
-        dt = datetime.now()
+            # 临近夜晚收盘前，强制发出撤单
+            if dt.hour == 2 and dt.minute == 59 and dt.second >= 55:
+                self.cancel_all(strategy)
+
         # 每分钟执行的逻辑
         if self.last_minute != dt.minute:
             self.last_minute = dt.minute

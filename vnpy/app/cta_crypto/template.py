@@ -975,7 +975,7 @@ class CtaFutureTemplate(CtaTemplate):
                 else:
                     self.write_error(u'委托空单平仓失败')
 
-    def grid_buy(self, grid):
+    def grid_buy(self, grid, **kwargs):
         """
         事务开多仓
         :return:
@@ -1002,7 +1002,7 @@ class CtaFutureTemplate(CtaTemplate):
                              .format(grid.type, grid.open_price, grid.volume, grid.close_price))
             return False
 
-    def grid_short(self, grid):
+    def grid_short(self, grid, **kwargs):
         """
         事务开空仓
         :return:
@@ -1029,7 +1029,7 @@ class CtaFutureTemplate(CtaTemplate):
                              .format(grid.type, grid.open_price, grid.volume, grid.close_price))
             return False
 
-    def grid_sell(self, grid):
+    def grid_sell(self, grid, **kwargs):
         """
         事务平多单仓位
         1.来源自止损止盈平仓
@@ -1090,7 +1090,7 @@ class CtaFutureTemplate(CtaTemplate):
 
             return True
 
-    def grid_cover(self, grid):
+    def grid_cover(self, grid, **kwargs):
         """
         事务平空单仓位
         1.来源自止损止盈平仓
@@ -1179,13 +1179,13 @@ class CtaFutureTemplate(CtaTemplate):
             # 只处理未成交的限价委托单
             if order_status in [Status.SUBMITTING, Status.NOTTRADED] and order_type == OrderType.LIMIT:
                 if over_seconds > self.cancel_seconds or force:  # 超过设置的时间还未成交
-                    self.write_log(u'超时{}秒未成交，取消委托单：vt_orderid:{},order:{}'
-                                   .format(over_seconds, vt_orderid, order_info))
+                    self.write_log(u'{}超时{}秒未成交，取消委托单：vt_orderid:{},order:{}'
+                                   .format(order_vt_symbol, over_seconds, vt_orderid, order_info))
                     order_info.update({'status': Status.CANCELLING})
                     self.active_orders.update({vt_orderid: order_info})
                     ret = self.cancel_order(str(vt_orderid))
                     if not ret:
-                        self.write_log(u'撤单失败,更新状态为撤单成功')
+                        self.write_log(f'{order_vt_symbol}撤单失败,更新状态为撤单成功')
                         order_info.update({'status': Status.CANCELLED})
                         self.active_orders.update({vt_orderid: order_info})
                         if order_grid and vt_orderid in order_grid.order_ids:

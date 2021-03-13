@@ -858,6 +858,10 @@ class CtaEngine(BaseEngine):
         vt_position_id = f"{gateway_name}.{vt_symbol}.{direction.value}"
         return self.main_engine.get_position(vt_position_id)
 
+    def get_all_positions(self):
+        """查询当前帐号得所有持仓合约"""
+        return self.main_engine.get_all_positions()
+
     def get_engine_type(self):
         """"""
         return self.engine_type
@@ -993,88 +997,110 @@ class CtaEngine(BaseEngine):
         """
         Init strategies in queue.
         """
-        strategy = self.strategies[strategy_name]
+        try:
+            strategy = self.strategies[strategy_name]
 
-        if strategy.inited:
-            self.write_error(f"{strategy_name}已经完成初始化，禁止重复操作")
-            return
+            if strategy.inited:
+                self.write_error(f"{strategy_name}已经完成初始化，禁止重复操作")
+                return
 
-        self.write_log(f"{strategy_name}开始执行初始化")
+            self.write_log(f"{strategy_name}开始执行初始化")
 
-        # Call on_init function of strategy
-        self.call_strategy_func(strategy, strategy.on_init)
+            # Call on_init function of strategy
+            self.call_strategy_func(strategy, strategy.on_init)
 
-        # Restore strategy data(variables)
-        # Pro 版本不使用自动恢复除了内部数据功能，由策略自身初始化时完成
-        # data = self.strategy_data.get(strategy_name, None)
-        # if data:
-        #     for name in strategy.variables:
-        #         value = data.get(name, None)
-        #         if value:
-        #             setattr(strategy, name, value)
+            # Restore strategy data(variables)
+            # Pro 版本不使用自动恢复除了内部数据功能，由策略自身初始化时完成
+            # data = self.strategy_data.get(strategy_name, None)
+            # if data:
+            #     for name in strategy.variables:
+            #         value = data.get(name, None)
+            #         if value:
+            #             setattr(strategy, name, value)
 
-        # Subscribe market data 订阅缺省的vt_symbol, 如果有其他合约需要订阅，由策略内部初始化时提交订阅即可。
-        self.subscribe_symbol(strategy_name, vt_symbol=strategy.vt_symbol)
+            # Subscribe market data 订阅缺省的vt_symbol, 如果有其他合约需要订阅，由策略内部初始化时提交订阅即可。
+            self.subscribe_symbol(strategy_name, vt_symbol=strategy.vt_symbol)
 
-        # Put event to update init completed status.
-        strategy.inited = True
-        self.put_strategy_event(strategy)
-        self.write_log(f"{strategy_name}初始化完成")
+            # Put event to update init completed status.
+            strategy.inited = True
+            self.put_strategy_event(strategy)
+            self.write_log(f"{strategy_name}初始化完成")
 
-        # 初始化后，自动启动策略交易
-        if auto_start:
-            self.start_strategy(strategy_name)
+            # 初始化后，自动启动策略交易
+            if auto_start:
+                self.start_strategy(strategy_name)
+
+        except Exception as ex:
+            msg = f'{strategy_name}执行on_init异常:{str(ex)}'
+            self.write_error(ex)
+            self.send_wechat(msg)
+            self.write_error(traceback.format_exc())
+
 
     def start_strategy(self, strategy_name: str):
         """
         Start a strategy.
         """
-        strategy = self.strategies[strategy_name]
-        if not strategy.inited:
-            msg = f"策略{strategy.strategy_name}启动失败，请先初始化"
-            self.write_error(msg)
-            return False, msg
+        try:
+            strategy = self.strategies[strategy_name]
+            if not strategy.inited:
+                msg = f"策略{strategy.strategy_name}启动失败，请先初始化"
+                self.write_error(msg)
+                return False, msg
 
-        if strategy.trading:
-            msg = f"{strategy_name}已经启动，请勿重复操作"
-            self.write_error(msg)
-            return False, msg
+            if strategy.trading:
+                msg = f"{strategy_name}已经启动，请勿重复操作"
+                self.write_error(msg)
+                return False, msg
 
-        self.call_strategy_func(strategy, strategy.on_start)
-        strategy.trading = True
+            self.call_strategy_func(strategy, strategy.on_start)
+            strategy.trading = True
 
-        self.put_strategy_event(strategy)
+            self.put_strategy_event(strategy)
 
-        return True, f'成功启动策略{strategy_name}'
+            return True, f'成功启动策略{strategy_name}'
+
+        except Exception as ex:
+            msg = f'{strategy_name}执行on_start异常:{str(ex)}'
+            self.write_error(ex)
+            self.send_wechat(msg)
+            self.write_error(traceback.format_exc())
 
     def stop_strategy(self, strategy_name: str):
         """
         Stop a strategy.
         """
-        strategy = self.strategies[strategy_name]
-        if not strategy.trading:
-            msg = f'{strategy_name}策略实例已处于停止交易状态'
-            self.write_log(msg)
-            return False, msg
+        try:
+            strategy = self.strategies[strategy_name]
+            if not strategy.trading:
+                msg = f'{strategy_name}策略实例已处于停止交易状态'
+                self.write_log(msg)
+                return False, msg
 
-        # Call on_stop function of the strategy
-        self.write_log(f'调用{strategy_name}的on_stop,停止交易')
-        self.call_strategy_func(strategy, strategy.on_stop)
+            # Call on_stop function of the strategy
+            self.write_log(f'调用{strategy_name}的on_stop,停止交易')
+            self.call_strategy_func(strategy, strategy.on_stop)
 
-        # Change trading status of strategy to False
-        strategy.trading = False
+            # Change trading status of strategy to False
+            strategy.trading = False
 
-        # Cancel all orders of the strategy
-        self.write_log(f'撤销{strategy_name}所有委托')
-        self.cancel_all(strategy)
+            # Cancel all orders of the strategy
+            self.write_log(f'撤销{strategy_name}所有委托')
+            self.cancel_all(strategy)
 
-        # Sync strategy variables to data file
-        #  取消此功能，由策略自身完成数据的持久化
-        # self.sync_strategy_data(strategy)
+            # Sync strategy variables to data file
+            #  取消此功能，由策略自身完成数据的持久化
+            # self.sync_strategy_data(strategy)
 
-        # Update GUI
-        self.put_strategy_event(strategy)
-        return True, f'成功停止策略{strategy_name}'
+            # Update GUI
+            self.put_strategy_event(strategy)
+            return True, f'成功停止策略{strategy_name}'
+        except Exception as ex:
+            msg = f'执行stop_strategy({strategy_name})异常:{str(ex)}'
+            self.write_error(ex)
+            self.send_wechat(msg)
+            self.write_error(traceback.format_exc())
+            return False, f'停止策略失败{strategy_name},异常:{str(ex)}'
 
     def edit_strategy(self, strategy_name: str, setting: dict):
         """
@@ -1094,36 +1120,45 @@ class CtaEngine(BaseEngine):
         """
         Remove a strategy.
         """
-        strategy = self.strategies[strategy_name]
-        if strategy.trading:
-            err_msg = f"策略{strategy.strategy_name}移除失败，请先停止"
-            self.write_error(err_msg)
-            return False, err_msg
+        try:
 
-        # Remove setting
-        self.remove_strategy_setting(strategy_name)
+            strategy = self.strategies[strategy_name]
+            if strategy.trading:
+                err_msg = f"策略{strategy.strategy_name}移除失败，请先停止"
+                self.write_error(err_msg)
+                return False, err_msg
 
-        # 移除订阅合约与策略的关联关系
-        for vt_symbol in self.strategy_symbol_map[strategy_name]:
-            # Remove from symbol strategy map
-            self.write_log(f'移除{vt_symbol}《=》{strategy_name}的订阅关系')
-            strategies = self.symbol_strategy_map[vt_symbol]
-            strategies.remove(strategy)
+            # Remove setting
+            self.remove_strategy_setting(strategy_name)
 
-        # Remove from active orderid map
-        if strategy_name in self.strategy_orderid_map:
-            vt_orderids = self.strategy_orderid_map.pop(strategy_name)
-            self.write_log(f'移除{strategy_name}的所有委托订单映射关系')
-            # Remove vt_orderid strategy map
-            for vt_orderid in vt_orderids:
-                if vt_orderid in self.orderid_strategy_map:
-                    self.orderid_strategy_map.pop(vt_orderid)
+            # 移除订阅合约与策略的关联关系
+            for vt_symbol in self.strategy_symbol_map[strategy_name]:
+                # Remove from symbol strategy map
+                self.write_log(f'移除{vt_symbol}《=》{strategy_name}的订阅关系')
+                strategies = self.symbol_strategy_map[vt_symbol]
+                strategies.remove(strategy)
 
-        # Remove from strategies
-        self.write_log(f'移除{strategy_name}策略实例')
-        self.strategies.pop(strategy_name)
+            # Remove from active orderid map
+            if strategy_name in self.strategy_orderid_map:
+                vt_orderids = self.strategy_orderid_map.pop(strategy_name)
+                self.write_log(f'移除{strategy_name}的所有委托订单映射关系')
+                # Remove vt_orderid strategy map
+                for vt_orderid in vt_orderids:
+                    if vt_orderid in self.orderid_strategy_map:
+                        self.orderid_strategy_map.pop(vt_orderid)
 
-        return True, f'成功移除{strategy_name}策略实例'
+            # Remove from strategies
+            self.write_log(f'移除{strategy_name}策略实例')
+            self.strategies.pop(strategy_name)
+
+            return True, f'成功移除{strategy_name}策略实例'
+
+        except Exception as ex:
+            msg = f'执行remove_strategy({strategy_name})异常:{str(ex)}'
+            self.write_error(ex)
+            self.send_wechat(msg)
+            self.write_error(traceback.format_exc())
+            return False, f'移除策略失败{strategy_name},异常:{str(ex)}'
 
     def reload_strategy(self, strategy_name: str, vt_symbol: str = '', setting: dict = {}):
         """
@@ -1133,63 +1168,70 @@ class CtaEngine(BaseEngine):
         :param setting:
         :return:
         """
-        self.write_log(f'开始重新加载策略{strategy_name}')
+        try:
+            self.write_log(f'开始重新加载策略{strategy_name}')
 
-        # 优先判断重启的策略，是否已经加载
-        if strategy_name not in self.strategies or strategy_name not in self.strategy_setting:
-            err_msg = f"{strategy_name}不在运行策略中，不能重启"
-            self.write_error(err_msg)
-            return False, err_msg
-
-        # 从本地配置文件中读取
-        if len(setting) == 0:
-            strategies_setting = load_json(self.setting_filename)
-            old_strategy_config = strategies_setting.get(strategy_name, {})
-        else:
-            old_strategy_config = copy(self.strategy_setting[strategy_name])
-
-        class_name = old_strategy_config.get('class_name')
-        if len(vt_symbol) == 0:
-            vt_symbol = old_strategy_config.get('vt_symbol')
-        if len(setting) == 0:
-            setting = old_strategy_config.get('setting')
-
-        module_name = self.class_module_map[class_name]
-        # 重新load class module
-        #if not self.load_strategy_class_from_module(module_name):
-        #    err_msg = f'不能加载模块:{module_name}'
-        #    self.write_error(err_msg)
-        #    return False, err_msg
-        if module_name:
-            new_class_name = module_name + '.' + class_name
-            self.write_log(u'转换策略为全路径:{}'.format(new_class_name))
-
-            strategy_class = import_module_by_str(new_class_name)
-            if strategy_class is None:
-                err_msg = u'加载策略模块失败:{}'.format(class_name)
+            # 优先判断重启的策略，是否已经加载
+            if strategy_name not in self.strategies or strategy_name not in self.strategy_setting:
+                err_msg = f"{strategy_name}不在运行策略中，不能重启"
                 self.write_error(err_msg)
                 return False, err_msg
 
-            self.write_log(f'重新加载模块成功，使用新模块:{new_class_name}')
-            self.classes[class_name] = strategy_class
+            # 从本地配置文件中读取
+            if len(setting) == 0:
+                strategies_setting = load_json(self.setting_filename)
+                old_strategy_config = strategies_setting.get(strategy_name, {})
+            else:
+                old_strategy_config = copy(self.strategy_setting[strategy_name])
 
-        # 停止当前策略实例的运行，撤单
-        self.stop_strategy(strategy_name)
+            class_name = old_strategy_config.get('class_name')
+            if len(vt_symbol) == 0:
+                vt_symbol = old_strategy_config.get('vt_symbol')
+            if len(setting) == 0:
+                setting = old_strategy_config.get('setting')
 
-        # 移除运行中的策略实例
-        self.remove_strategy(strategy_name)
+            module_name = self.class_module_map[class_name]
+            # 重新load class module
+            #if not self.load_strategy_class_from_module(module_name):
+            #    err_msg = f'不能加载模块:{module_name}'
+            #    self.write_error(err_msg)
+            #    return False, err_msg
+            if module_name:
+                new_class_name = module_name + '.' + class_name
+                self.write_log(u'转换策略为全路径:{}'.format(new_class_name))
 
-        # 重新添加策略
-        self.add_strategy(class_name=class_name,
-                          strategy_name=strategy_name,
-                          vt_symbol=vt_symbol,
-                          setting=setting,
-                          auto_init=old_strategy_config.get('auto_init', False),
-                          auto_start=old_strategy_config.get('auto_start', False))
+                strategy_class = import_module_by_str(new_class_name)
+                if strategy_class is None:
+                    err_msg = u'加载策略模块失败:{}'.format(class_name)
+                    self.write_error(err_msg)
+                    return False, err_msg
 
-        msg = f'成功重载策略{strategy_name}'
-        self.write_log(msg)
-        return True, msg
+                self.write_log(f'重新加载模块成功，使用新模块:{new_class_name}')
+                self.classes[class_name] = strategy_class
+
+            # 停止当前策略实例的运行，撤单
+            self.stop_strategy(strategy_name)
+
+            # 移除运行中的策略实例
+            self.remove_strategy(strategy_name)
+
+            # 重新添加策略
+            self.add_strategy(class_name=class_name,
+                              strategy_name=strategy_name,
+                              vt_symbol=vt_symbol,
+                              setting=setting,
+                              auto_init=old_strategy_config.get('auto_init', False),
+                              auto_start=old_strategy_config.get('auto_start', False))
+
+            msg = f'成功重载策略{strategy_name}'
+            self.write_log(msg)
+            return True, msg
+        except Exception as ex:
+            msg = f'执行reload_strategy({strategy_name})异常:{str(ex)}'
+            self.write_error(ex)
+            self.send_wechat(msg)
+            self.write_error(traceback.format_exc())
+            return False, f'重启策略失败{strategy_name},异常:{str(ex)}'
 
     def save_strategy_data(self, select_name: str = 'ALL'):
         """ save strategy data"""

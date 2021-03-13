@@ -212,11 +212,12 @@ class BackTestingEngine(object):
         self.test_setting = None  # 回测设置
         self.strategy_setting = None  # 所有回测策略得设置
 
-    def create_fund_kline(self, name, use_renko=False):
+    def create_fund_kline(self, name, use_renko=False, extra_setting = {}):
         """
         创建资金曲线
         :param name: 账号名，或者策略名
         :param use_renko:
+        :param extra_setting: 扩展得k线设置，例如macd等
         :return:
         """
         setting = {}
@@ -231,6 +232,10 @@ class BackTestingEngine(object):
             # 使用砖图，高度是资金的千分之一
             setting['height'] = self.init_capital * 0.001
             setting['use_renko'] = True
+
+        for k, v in extra_setting.items():
+            if k not in setting:
+                setting.update({k: v})
 
         fund_kline = FundKline(cta_engine=self, setting=setting)
         self.fund_kline_dict.update({name: fund_kline})
@@ -253,6 +258,36 @@ class BackTestingEngine(object):
             return kline
         else:
             return None
+
+    # todo wj
+    def save_fund_kline(self, name: str = None):
+        # 没有指定账号，并且存在一个或多个资金K线
+        if len(self.fund_kline_dict) > 0:
+            # 优先找vt_setting中，配置了strategy_groud的资金K线
+            kline = self.fund_kline_dict.get(name, None)
+            # 找不到，返回第一个
+            if kline is None:
+                kline = self.fund_kline_dict.values()[0]
+
+            kline_file = str(os.path.join(self.get_data_path(), 'fund_{}.csv'.format(name)))
+            # 如果数据文件存在，则删除数据
+            if os.path.exists(kline_file):
+                os.remove(kline_file)
+
+            # 设置 kline的输出文件
+            kline.kline.export_filename = kline_file
+            kline.kline.export_fields = [
+                {'name': 'datetime', 'source': 'bar', 'attr': 'datetime', 'type_': 'datetime'},
+                {'name': 'open', 'source': 'bar', 'attr': 'open_price', 'type_': 'float'},
+                {'name': 'high', 'source': 'bar', 'attr': 'high_price', 'type_': 'float'},
+                {'name': 'low', 'source': 'bar', 'attr': 'low_price', 'type_': 'float'},
+                {'name': 'close', 'source': 'bar', 'attr': 'close_price', 'type_': 'float'},
+                {'name': 'turnover', 'source': 'bar', 'attr': 'turnover', 'type_': 'float'},
+                {'name': 'volume', 'source': 'bar', 'attr': 'volume', 'type_': 'float'},
+                {'name': 'open_interest', 'source': 'bar', 'attr': 'open_interest', 'type_': 'float'}
+            ]
+
+            kline.save()
 
     def get_account(self, vt_accountid: str = ""):
         """返回账号的实时权益，可用资金，仓位比例,投资仓位比例上限"""
@@ -2198,6 +2233,11 @@ class BackTestingEngine(object):
 
     def show_backtesting_result(self):
         """显示回测结果"""
+
+        # 导出资金曲线
+        if self.active_fund_kline:
+            for key in self.fund_kline_dict.keys():
+                self.save_fund_kline(key)
 
         d, daily_net_capital, daily_capital = self.get_result()
 

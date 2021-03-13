@@ -1841,7 +1841,7 @@ class BackTestingEngine(object):
             self.daily_max_drawdown_rate = drawdown_rate
             self.max_drawdown_rate_time = data['date']
 
-        msg = u'{}:  net={}, capital={} max={} margin={} commission={}， pos: {}' \
+        msg = u'{}:  net={}, capital={} max={} holding_profit={} commission={}， pos: \n{}' \
             .format(data['date'],
                     data['net'], c, m,
                     today_holding_profit,
@@ -1922,6 +1922,7 @@ class BackTestingEngine(object):
         d = {}
         d['init_capital'] = self.init_capital
         d['profit'] = self.cur_capital - self.init_capital
+        d['net_capital'] = self.net_capital
         d['max_capital'] = self.max_net_capital  # 取消原 maxCapital
 
         if len(self.pnl_list) == 0:
@@ -2002,8 +2003,11 @@ class BackTestingEngine(object):
         result_info.update({u'期初资金': d['init_capital']})
         self.output(u'期初资金：\t%s' % format_number(d['init_capital']))
 
-        result_info.update({u'总盈亏': d['profit']})
-        self.output(u'总盈亏：\t%s' % format_number(d['profit']))
+        result_info.update({u'期末资金': d['net_capital']})
+        self.output(u'期末资金：\t%s' % format_number(d['net_capital']))
+
+        result_info.update({u'平仓盈亏': d['profit']})
+        self.output(u'平仓盈亏：\t%s' % format_number(d['profit']))
 
         result_info.update({u'资金最高净值': d['max_capital']})
         self.output(u'资金最高净值：\t%s' % format_number(d['max_capital']))

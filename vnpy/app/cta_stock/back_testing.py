@@ -212,11 +212,12 @@ class BackTestingEngine(object):
         self.test_setting = None  # 回测设置
         self.strategy_setting = None  # 所有回测策略得设置
 
-    def create_fund_kline(self, name, use_renko=False):
+    def create_fund_kline(self, name, use_renko=False, extra_setting = {}):
         """
         创建资金曲线
         :param name: 账号名，或者策略名
-        :param use_renko:
+        :param use_renko:是否使用砖图
+        :param extra_setting: 扩展得k线设置，例如macd等
         :return:
         """
         setting = {}
@@ -228,7 +229,9 @@ class BackTestingEngine(object):
         setting['price_tick'] = 0.01
         setting['underlying_symbol'] = 'fund'
         setting['is_7x24'] = self.is_7x24
-
+        for k,v in extra_setting.items():
+            if k not in setting:
+                setting.update({k:v})
         if use_renko:
             # 使用砖图，高度是资金的千分之一
             setting['height'] = self.init_capital * 0.001
@@ -1255,7 +1258,7 @@ class BackTestingEngine(object):
         """更新持仓信息,把今仓=>昨仓"""
 
         for k, v in self.positions.items():
-            if v.volume > 0:
+            if v.volume != v.yd_volume:
                 self.write_log(f'调整{v.vt_symbol}持仓: 昨仓{v.yd_volume} => {v.volume}')
                 v.yd_volume = v.volume
 

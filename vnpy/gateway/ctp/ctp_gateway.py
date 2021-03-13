@@ -4,6 +4,7 @@ import sys
 import traceback
 import json
 from datetime import datetime, timedelta
+from time import time
 from copy import copy, deepcopy
 from functools import lru_cache
 from typing import List
@@ -2055,8 +2056,9 @@ class TqMdApi():
         """
         更新行情/委托/账户/持仓
         """
-        while self.api.wait_update():
-
+        while self.is_connected:
+            deadline = time() + 5
+            self.api.wait_update(deadline=deadline)
             # 更新行情信息
             for vt_symbol, quote in self.quote_objs:
                 if self.api.is_changing(quote):
