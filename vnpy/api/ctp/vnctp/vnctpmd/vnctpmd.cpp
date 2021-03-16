@@ -1,11 +1,11 @@
-// vnctpmd.cpp : ¶¨Òå DLL Ó¦ÓÃ³ÌÐòµÄµ¼³öº¯Êý¡£
+// vnctpmd.cpp : ï¿½ï¿½ï¿½ï¿½ DLL Ó¦ï¿½Ã³ï¿½ï¿½ï¿½Äµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 //
 
 #include "vnctpmd.h"
 
 
 ///-------------------------------------------------------------------------------------
-///C++µÄ»Øµ÷º¯Êý½«Êý¾Ý±£´æµ½¶ÓÁÐÖÐ
+///C++ï¿½Ä»Øµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ý±ï¿½ï¿½æµ½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 ///-------------------------------------------------------------------------------------
 
 void MdApi::OnFrontConnected()
@@ -60,6 +60,27 @@ void MdApi::OnRspUserLogout(CThostFtdcUserLogoutField *pUserLogout, CThostFtdcRs
 	{
 		CThostFtdcUserLogoutField *task_data = new CThostFtdcUserLogoutField();
 		*task_data = *pUserLogout;
+		task.task_data = task_data;
+	}
+	if (pRspInfo)
+	{
+		CThostFtdcRspInfoField *task_error = new CThostFtdcRspInfoField();
+		*task_error = *pRspInfo;
+		task.task_error = task_error;
+	}
+	task.task_id = nRequestID;
+	task.task_last = bIsLast;
+	this->task_queue.push(task);
+};
+
+void MdApi::OnRspQryMulticastInstrument(CThostFtdcMulticastInstrumentField *pMulticastInstrument, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast)
+{
+	Task task = Task();
+	task.task_name = ONRSPQRYMULTICASTINSTRUMENT;
+	if (pMulticastInstrument)
+	{
+		CThostFtdcMulticastInstrumentField *task_data = new CThostFtdcMulticastInstrumentField();
+		*task_data = *pMulticastInstrument;
 		task.task_data = task_data;
 	}
 	if (pRspInfo)
@@ -201,7 +222,7 @@ void MdApi::OnRtnForQuoteRsp(CThostFtdcForQuoteRspField *pForQuoteRsp)
 
 
 ///-------------------------------------------------------------------------------------
-///¹¤×÷Ïß³Ì´Ó¶ÓÁÐÖÐÈ¡³öÊý¾Ý£¬×ª»¯Îªpython¶ÔÏóºó£¬½øÐÐÍÆËÍ
+///ï¿½ï¿½ï¿½ï¿½ï¿½ß³Ì´Ó¶ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½ï¿½ï¿½ï¿½Ý£ï¿½×ªï¿½ï¿½Îªpythonï¿½ï¿½ï¿½ï¿½ó£¬½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 ///-------------------------------------------------------------------------------------
 
 void MdApi::processTask()
@@ -211,7 +232,7 @@ void MdApi::processTask()
         while (this->active)
         {
             Task task = this->task_queue.pop();
-            
+
             switch (task.task_name)
             {
             case ONFRONTCONNECTED:
@@ -241,6 +262,12 @@ void MdApi::processTask()
             case ONRSPUSERLOGOUT:
             {
                 this->processRspUserLogout(&task);
+                break;
+            }
+
+            case ONRSPQRYMULTICASTINSTRUMENT:
+            {
+                this->processRspQryMulticastInstrument(&task);
                 break;
             }
 
@@ -364,6 +391,32 @@ void MdApi::processRspUserLogout(Task *task)
 		delete task->task_error;
 	}
 	this->onRspUserLogout(data, error, task->task_id, task->task_last);
+};
+
+void MdApi::processRspQryMulticastInstrument(Task *task)
+{
+	gil_scoped_acquire acquire;
+	dict data;
+	if (task->task_data)
+	{
+		CThostFtdcMulticastInstrumentField *task_data = (CThostFtdcMulticastInstrumentField*)task->task_data;
+		data["TopicID"] = task_data->TopicID;
+		data["InstrumentID"] = toUtf(task_data->InstrumentID);
+		data["InstrumentNo"] = task_data->InstrumentNo;
+		data["CodePrice"] = task_data->CodePrice;
+		data["VolumeMultiple"] = task_data->VolumeMultiple;
+		data["PriceTick"] = task_data->PriceTick;
+		delete task->task_data;
+	}
+	dict error;
+	if (task->task_error)
+	{
+		CThostFtdcRspInfoField *task_error = (CThostFtdcRspInfoField*)task->task_error;
+		error["ErrorID"] = task_error->ErrorID;
+		error["ErrorMsg"] = toUtf(task_error->ErrorMsg);
+		delete task_error;
+	}
+	this->onRspQryMulticastInstrument(data, error, task->task_id, task->task_last);
 };
 
 void MdApi::processRspError(Task *task)
@@ -539,7 +592,7 @@ void MdApi::processRtnForQuoteRsp(Task *task)
 };
 
 ///-------------------------------------------------------------------------------------
-///Ö÷¶¯º¯Êý
+///ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 ///-------------------------------------------------------------------------------------
 
 void MdApi::createFtdcMdApi(string pszFlowPath)
@@ -637,6 +690,7 @@ int MdApi::reqUserLogin(const dict &req, int reqid)
 	getString(req, "OneTimePassword", myreq.OneTimePassword);
 	getString(req, "ClientIPAddress", myreq.ClientIPAddress);
 	getString(req, "LoginRemark", myreq.LoginRemark);
+	getInt(req, "ClientIPPort", &myreq.ClientIPPort);
 	int i = this->api->ReqUserLogin(&myreq, reqid);
 	return i;
 };
@@ -651,9 +705,18 @@ int MdApi::reqUserLogout(const dict &req, int reqid)
 	return i;
 };
 
+int MdApi::reqQryMulticastInstrument(const dict &req, int reqid)
+{
+	CThostFtdcQryMulticastInstrumentField myreq = CThostFtdcQryMulticastInstrumentField();
+	memset(&myreq, 0, sizeof(myreq));
+	getInt(req, "TopicID", &myreq.TopicID);
+	getString(req, "InstrumentID", myreq.InstrumentID);
+	int i = this->api->ReqQryMulticastInstrument(&myreq, reqid);
+	return i;
+};
 
 ///-------------------------------------------------------------------------------------
-///Boost.Python·â×°
+///Boost.Pythonï¿½ï¿½×°
 ///-------------------------------------------------------------------------------------
 
 class PyMdApi: public MdApi
@@ -721,6 +784,17 @@ public:
 		}
 	};
 
+    void onRspQryMulticastInstrument(const dict &data, const dict &error, int reqid, bool last) override
+    {
+        try
+        {
+            PYBIND11_OVERLOAD(void, MdApi, onRspQryMulticastInstrument, data, error, reqid, last);
+        }
+        catch (const error_already_set &e)
+        {
+            cout << e.what() << endl;
+        }
+    };
 	void onRspError(const dict &error, int reqid, bool last) override
 	{
 		try
@@ -825,12 +899,13 @@ PYBIND11_MODULE(vnctpmd, m)
 		.def("unSubscribeForQuoteRsp", &MdApi::unSubscribeForQuoteRsp)
 		.def("reqUserLogin", &MdApi::reqUserLogin)
 		.def("reqUserLogout", &MdApi::reqUserLogout)
-
+        .def("reqQryMulticastInstrument", &MdApi::reqQryMulticastInstrument)
 		.def("onFrontConnected", &MdApi::onFrontConnected)
 		.def("onFrontDisconnected", &MdApi::onFrontDisconnected)
 		.def("onHeartBeatWarning", &MdApi::onHeartBeatWarning)
 		.def("onRspUserLogin", &MdApi::onRspUserLogin)
 		.def("onRspUserLogout", &MdApi::onRspUserLogout)
+		.def("onRspQryMulticastInstrument", &MdApi::onRspQryMulticastInstrument)
 		.def("onRspError", &MdApi::onRspError)
 		.def("onRspSubMarketData", &MdApi::onRspSubMarketData)
 		.def("onRspUnSubMarketData", &MdApi::onRspUnSubMarketData)

@@ -559,6 +559,8 @@ int TdApi::reqCombActionInsert(const dict &req, int reqid)
 	getString(req, "IPAddress", myreq.IPAddress);
 	getString(req, "MacAddress", myreq.MacAddress);
 	getString(req, "InvestUnitID", myreq.InvestUnitID);
+	getInt(req, "FrontID", &myreq.FrontID);
+	getInt(req, "SessionID", &myreq.SessionID);
 	int i = this->api->ReqCombActionInsert(&myreq, reqid);
 	return i;
 };

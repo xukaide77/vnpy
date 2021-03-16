@@ -71,6 +71,32 @@ void MdApi::processRspUserLogout(Task *task)
 	this->onRspUserLogout(data, error, task->task_id, task->task_last);
 };
 
+void MdApi::processRspQryMulticastInstrument(Task *task)
+{
+	gil_scoped_acquire acquire;
+	dict data;
+	if (task->task_data)
+	{
+		CThostFtdcMulticastInstrumentField *task_data = (CThostFtdcMulticastInstrumentField*)task->task_data;
+		data["TopicID"] = task_data->TopicID;
+		data["InstrumentID"] = toUtf(task_data->InstrumentID);
+		data["InstrumentNo"] = task_data->InstrumentNo;
+		data["CodePrice"] = task_data->CodePrice;
+		data["VolumeMultiple"] = task_data->VolumeMultiple;
+		data["PriceTick"] = task_data->PriceTick;
+		delete task_data;
+	}
+	dict error;
+	if (task->task_error)
+	{
+		CThostFtdcRspInfoField *task_error = (CThostFtdcRspInfoField*)task->task_error;
+		error["ErrorID"] = task_error->ErrorID;
+		error["ErrorMsg"] = toUtf(task_error->ErrorMsg);
+		delete task_error;
+	}
+	this->onRspQryMulticastInstrument(data, error, task->task_id, task->task_last);
+};
+
 void MdApi::processRspError(Task *task)
 {
 	gil_scoped_acquire acquire;

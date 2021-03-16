@@ -68,6 +68,7 @@ CThostFtdcAuthenticationInfoField = {
     "IsResult": "int",
     "AppID": "string",
     "AppType": "char",
+    "ClientIPAddress": "string",
 }
 
 CThostFtdcRspUserLogin2Field = {
@@ -410,6 +411,9 @@ CThostFtdcInvestorPositionField = {
     "ExchangeID": "string",
     "YdStrikeFrozen": "int",
     "InvestUnitID": "string",
+    "PositionCostOffset": "double",
+    "TasPosition": "int",
+    "TasPositionCost": "double",
 }
 
 CThostFtdcInstrumentMarginRateField = {
@@ -1160,6 +1164,9 @@ CThostFtdcSyncingInvestorPositionField = {
     "ExchangeID": "string",
     "YdStrikeFrozen": "int",
     "InvestUnitID": "string",
+    "PositionCostOffset": "double",
+    "TasPosition": "int",
+    "TasPositionCost": "double",
 }
 
 CThostFtdcSyncingInstrumentMarginRateField = {
@@ -2185,6 +2192,8 @@ CThostFtdcInputCombActionField = {
     "IPAddress": "string",
     "MacAddress": "string",
     "InvestUnitID": "string",
+    "FrontID": "int",
+    "SessionID": "int",
 }
 
 CThostFtdcCombActionField = {
@@ -2569,6 +2578,8 @@ CThostFtdcSyncDelaySwapField = {
     "FromRemainSwap": "double",
     "ToCurrencyID": "string",
     "ToAmount": "double",
+    "IsManualSwap": "int",
+    "IsAllRemainSetZero": "int",
 }
 
 CThostFtdcQrySyncDelaySwapField = {
@@ -2796,7 +2807,9 @@ CThostFtdcInvestorPositionDetailField = {
     "SettlementPrice": "double",
     "CloseVolume": "int",
     "CloseAmount": "double",
+    "TimeFirstVolume": "int",
     "InvestUnitID": "string",
+    "SpecPosiType": "char",
 }
 
 CThostFtdcTradingAccountPasswordField = {
@@ -3544,6 +3557,26 @@ CThostFtdcQryBulletinField = {
     "SequenceNo": "int",
     "NewsType": "string",
     "NewsUrgency": "char",
+}
+
+CThostFtdcMulticastInstrumentField = {
+    "TopicID": "int",
+    "InstrumentID": "string",
+    "InstrumentNo": "int",
+    "CodePrice": "double",
+    "VolumeMultiple": "int",
+    "PriceTick": "double",
+}
+
+CThostFtdcQryMulticastInstrumentField = {
+    "TopicID": "int",
+    "InstrumentID": "string",
+}
+
+CThostFtdcAppIDAuthAssignField = {
+    "BrokerID": "string",
+    "AppID": "string",
+    "DRIdentityID": "int",
 }
 
 CThostFtdcReqOpenAccountField = {
@@ -4906,3 +4939,21 @@ CThostFtdcDepartmentUserField = {
 CThostFtdcQueryFreqField = {
     "QueryFreq": "int",
 }
+
+CThostFtdcAuthForbiddenIPField = {
+    "IPAddress": "string",
+}
+
+CThostFtdcQryAuthForbiddenIPField = {
+    "IPAddress": "string",
+}
+
+CThostFtdcSyncDelaySwapFrozenField = {
+    "DelaySwapSeqNo": "string",
+    "BrokerID": "string",
+    "InvestorID": "string",
+    "FromCurrencyID": "string",
+    "FromRemainSwap": "double",
+    "IsManualSwap": "int",
+}
+
