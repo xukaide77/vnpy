@@ -493,13 +493,13 @@ class CtaLineBar(object):
         self.line_pre_high = []  # K线的前para_pre_len的的最高
         self.line_pre_low = []  # K线的前para_pre_len的的最低
         # 唐其安高点、低点清单（相当于缠论的分型）
-        self.tqn_high_list = []  # 所有的创新高的高点(分型）清单 { "price":xxx, "datetime": "yyyy-mm-dd HH:MM:SS"}
-        self.tqn_low_list = []  # 所有的创新低的低点（分型）清单 { "price":xxx, "datetime": "yyyy-mm-dd HH:MM:SS"}
+        self.tqa_high_list = []  # 所有的创新高的高点(分型）清单 { "price":xxx, "datetime": "yyyy-mm-dd HH:MM:SS"}
+        self.tqa_low_list = []  # 所有的创新低的低点（分型）清单 { "price":xxx, "datetime": "yyyy-mm-dd HH:MM:SS"}
         # 唐其安笔清单，相当与缠论的笔,最后一笔是未完成的
-        self.tqn_bi_list = []
+        self.tqa_bi_list = []
         # 唐其安中枢清单，相当于缠论的中枢
-        self.cur_tqn_zs = {}  # 当前唐其安中枢。
-        self.tqn_zs_list = []
+        self.cur_tqa_zs = {}  # 当前唐其安中枢。
+        self.tqa_zs_list = []
 
         self.line_ma1 = []  # K线的MA(para_ma1_len)均线，不包含未走完的bar
         self.line_ma2 = []  # K线的MA(para_ma2_len)均线，不包含未走完的bar
@@ -1462,35 +1462,35 @@ class CtaLineBar(object):
             if len(self.line_macd) > 0:
                 d.update({'macd': self.line_macd[-1]})
             # 当前不存在最后的高点，创建一个
-            if len(self.tqn_high_list) == 0:
-                self.tqn_high_list.append(d)
+            if len(self.tqa_high_list) == 0:
+                self.tqa_high_list.append(d)
                 return
 
             # 如果存在最后的高点，最后的低点
-            last_low_time = self.tqn_low_list[-1].get('datetime', None) if len(self.tqn_low_list) > 0 else None
-            last_high_time = self.tqn_high_list[-1].get('datetime', None) if len(
-                self.tqn_high_list) > 0 else None
-            last_high_price = self.tqn_high_list[-1].get('price') if len(
-                self.tqn_high_list) > 0 else None
+            last_low_time = self.tqa_low_list[-1].get('datetime', None) if len(self.tqa_low_list) > 0 else None
+            last_high_time = self.tqa_high_list[-1].get('datetime', None) if len(
+                self.tqa_high_list) > 0 else None
+            last_high_price = self.tqa_high_list[-1].get('price') if len(
+                self.tqa_high_list) > 0 else None
 
             # 低点的时间，比高点的时间更晚, 添加一个新的高点
             if last_low_time is not None and last_high_time is not None and last_high_time < last_low_time:
                 # 添加一个新的高点
-                self.tqn_high_list.append(d)
+                self.tqa_high_list.append(d)
                 # 创建一个未走完的笔，低点-> 高点
-                self.create_tqn_bi(direction=Direction.LONG)
+                self.create_tqa_bi(direction=Direction.LONG)
                 # 输出确定的一笔（高点->低点) =>csv文件
-                self.export_tqn_bi()
+                self.export_tqa_bi()
                 # 计算是否有中枢
-                self.update_tqn_zs()
+                self.update_tqa_zs()
                 return
 
             # 延续当前的高点
             if pre_high > last_high_price:
-                self.tqn_high_list[-1].update(d)
+                self.tqa_high_list[-1].update(d)
                 self.update_tnq_bi(point=d, direction=Direction.LONG)
                 # 计算是否有中枢
-                self.update_tqn_zs()
+                self.update_tqa_zs()
 
         # 产生新得低点
         if pre_low < self.line_pre_low[-2] and pre_high == self.line_pre_high[-2]:
@@ -1505,38 +1505,38 @@ class CtaLineBar(object):
                 d.update({'macd': self.line_macd[-1]})
 
             # 当前不存在最后的低点，创建一个
-            if len(self.tqn_low_list) == 0:
-                self.tqn_low_list.append(d)
+            if len(self.tqa_low_list) == 0:
+                self.tqa_low_list.append(d)
                 return
 
             # 如果存在最后的高点，最后的低点
-            last_low_time = self.tqn_low_list[-1].get('datetime', None) if len(
-                self.tqn_low_list) > 0 else None
-            last_high_time = self.tqn_high_list[-1].get('datetime', None) if len(
-                self.tqn_high_list) > 0 else None
-            last_low_price = self.tqn_low_list[-1].get('price', None) if len(
-                self.tqn_low_list) > 0 else None
+            last_low_time = self.tqa_low_list[-1].get('datetime', None) if len(
+                self.tqa_low_list) > 0 else None
+            last_high_time = self.tqa_high_list[-1].get('datetime', None) if len(
+                self.tqa_high_list) > 0 else None
+            last_low_price = self.tqa_low_list[-1].get('price', None) if len(
+                self.tqa_low_list) > 0 else None
 
             # 高点的时间，比低点的时间更晚, 添加一个新的低点
             if last_low_time is not None and last_high_time is not None and last_low_time < last_high_time:
                 # 添加一个新的低点
-                self.tqn_low_list.append(d)
+                self.tqa_low_list.append(d)
                 # 创建一个未走完的笔， 高点->低点
-                self.create_tqn_bi(direction=Direction.SHORT)
+                self.create_tqa_bi(direction=Direction.SHORT)
                 # 输出确定的一笔（低点->高点) =>csv文件
-                self.export_tqn_bi()
+                self.export_tqa_bi()
                 # 计算是否有中枢
-                self.update_tqn_zs()
+                self.update_tqa_zs()
                 return
 
             # 延续当前的低点
             if pre_low < last_low_price:
-                self.tqn_low_list[-1].update(d)
+                self.tqa_low_list[-1].update(d)
                 self.update_tnq_bi(point=d, direction=Direction.SHORT)
                 # 计算是否有中枢
-                self.update_tqn_zs()
+                self.update_tqa_zs()
 
-    def create_tqn_bi(self, direction):
+    def create_tqa_bi(self, direction):
         """
         创建唐其安的笔，该笔未走完的
         :param direction: 笔的方向 direction Direction.Long, Direction.Short
@@ -1548,15 +1548,15 @@ class CtaLineBar(object):
         else:
             direction = -1
 
-        if len(self.tqn_bi_list) > self.max_hold_bars:  # 维持最大缓存数量 超过则删除最前面
-            del self.tqn_bi_list[0]
+        if len(self.tqa_bi_list) > self.max_hold_bars:  # 维持最大缓存数量 超过则删除最前面
+            del self.tqa_bi_list[0]
 
         # 从低=>高得线段, self.line_low_list[-1] => self.line_high_list[-1]
         if direction == 1:
-            if len(self.tqn_low_list) < 1:
+            if len(self.tqa_low_list) < 1:
                 return
-            low_point = self.tqn_low_list[-1]
-            high_point = self.tqn_high_list[-1]
+            low_point = self.tqa_low_list[-1]
+            high_point = self.tqa_high_list[-1]
             d = {
                 "start": low_point.get('datetime'),
                 "end": high_point.get('datetime'),
@@ -1565,14 +1565,14 @@ class CtaLineBar(object):
                 "high": high_point.get('price'),
                 "low": low_point.get('price')
             }
-            self.tqn_bi_list.append(d)
+            self.tqa_bi_list.append(d)
 
         # 从高=>低得线段, self.line_high_list[-1] => self.line_low_list[-1]
         else:
-            if len(self.tqn_high_list) < 1:
+            if len(self.tqa_high_list) < 1:
                 return
-            high_point = self.tqn_high_list[-1]
-            low_point = self.tqn_low_list[-1]
+            high_point = self.tqa_high_list[-1]
+            low_point = self.tqa_low_list[-1]
             d = {
                 "start": high_point.get('datetime'),
                 "end": low_point.get('datetime'),
@@ -1581,7 +1581,7 @@ class CtaLineBar(object):
                 "high": high_point.get('price'),
                 "low": low_point.get('price')
             }
-            self.tqn_bi_list.append(d)
+            self.tqa_bi_list.append(d)
 
     def update_tnq_bi(self, point, direction):
         """
@@ -1590,7 +1590,7 @@ class CtaLineBar(object):
         :param direction:
         :return:
         """
-        if len(self.tqn_bi_list) < 1:
+        if len(self.tqa_bi_list) < 1:
             return
 
         # Direction => int
@@ -1599,7 +1599,7 @@ class CtaLineBar(object):
         else:
             direction = -1
 
-        bi = self.tqn_bi_list[-1]
+        bi = self.tqa_bi_list[-1]
         if bi.get('direction') != direction:
             return
         # 方向为多
@@ -1617,7 +1617,7 @@ class CtaLineBar(object):
                 "low": point.get('price'),
             })
 
-    def export_tqn_bi(self):
+    def export_tqa_bi(self):
         """
         唐其安高点、低点形成的笔，输出.csv文件
         start.end,direction,height,high,low
@@ -1628,12 +1628,12 @@ class CtaLineBar(object):
         if self.export_tqa_bi_filename is None:
             return
 
-        if len(self.tqn_bi_list) < 2:
+        if len(self.tqa_bi_list) < 2:
             return
 
         # 直接插入倒数第二条记录，即已经走完的笔
         self.append_data(file_name=self.export_tqa_bi_filename,
-                         dict_data=self.tqn_bi_list[-2],
+                         dict_data=self.tqa_bi_list[-2],
                          field_names=["start", "end", "direction", "height", "high", "low"]
                          )
 
@@ -1645,10 +1645,10 @@ class CtaLineBar(object):
         #
         # 从低=>高得线段, self.line_low_list[-2] => self.line_high_list[-1]
         # if direction == 1:
-        # if len(self.tqn_low_list) < 2:
+        # if len(self.tqa_low_list) < 2:
         #     return
-        # low_point = self.tqn_low_list[-2]
-        # high_point = self.tqn_high_list[-1]
+        # low_point = self.tqa_low_list[-2]
+        # high_point = self.tqa_high_list[-1]
         # d = {
         #     "start": low_point.get('datetime'),
         #     "end": high_point.get('datetime'),
@@ -1657,7 +1657,7 @@ class CtaLineBar(object):
         #     "high": high_point.get('price'),
         #     "low": low_point.get('price')
         # }
-        # if len(self.tqn_bi_list) < 2:
+        # if len(self.tqa_bi_list) < 2:
         #     return
         #
         # self.append_data(file_name=self.export_bi_filename,
@@ -1666,10 +1666,10 @@ class CtaLineBar(object):
         #                  )
         # 从高=>低得线段, self.line_high_list[-2] => self.line_low_list[-1]
         # else:
-        #     if len(self.tqn_high_list) < 2:
+        #     if len(self.tqa_high_list) < 2:
         #         return
-        #     high_point = self.tqn_high_list[-2]
-        #     low_point = self.tqn_low_list[-1]
+        #     high_point = self.tqa_high_list[-2]
+        #     low_point = self.tqa_low_list[-1]
         #     d = {
         #         "start": high_point.get('datetime'),
         #         "end": low_point.get('datetime'),
@@ -1683,7 +1683,7 @@ class CtaLineBar(object):
         #                      field_names=["start", "end", "direction", "height", "high", "low"]
         #                      )
 
-    def update_tqn_zs(self):
+    def update_tqa_zs(self):
         """
         更新唐其安中枢
         这里跟缠论的中枢不同，主要根据最后一笔，判断是否与前2、前三，形成中枢。
@@ -1692,19 +1692,19 @@ class CtaLineBar(object):
         如果形成，更新；如果不形成，则剔除
         :return:
         """
-        if len(self.tqn_bi_list) < 4:
+        if len(self.tqa_bi_list) < 4:
             return
 
-        cur_bi = self.tqn_bi_list[-1]  # 当前笔
-        second_bi = self.tqn_bi_list[-2]  # 倒数第二笔
-        third_bi = self.tqn_bi_list[-3]  # 倒数第三笔
-        four_bi = self.tqn_bi_list[-4]  # 倒数第四笔
+        cur_bi = self.tqa_bi_list[-1]  # 当前笔
+        second_bi = self.tqa_bi_list[-2]  # 倒数第二笔
+        third_bi = self.tqa_bi_list[-3]  # 倒数第三笔
+        four_bi = self.tqa_bi_list[-4]  # 倒数第四笔
 
         # 当前笔的方向
         direction = cur_bi.get('direction')
 
         # 当前没有中枢
-        if len(self.cur_tqn_zs) == 0:
+        if len(self.cur_tqa_zs) == 0:
             # 1,3 的重叠的线段
             first_third_high = min(third_bi.get('high'), cur_bi.get('high'))
             first_third_low = max(third_bi.get('low'), cur_bi.get('low'))
@@ -1716,7 +1716,7 @@ class CtaLineBar(object):
             # 上涨中 1-3，2-4 形成重叠
             if second_four_low <= first_third_low < second_four_high <= first_third_high:
                 # 中枢的方向按照第四笔
-                self.cur_tqn_zs = {
+                self.cur_tqa_zs = {
                     "direction": four_bi.get('direction'),  # 段的方向：进入笔的方向
                     "start": four_bi.get('end'),  # zs的开始
                     "end": cur_bi.get("end"),  # zs的结束时间
@@ -1728,15 +1728,15 @@ class CtaLineBar(object):
                     "exit_start": cur_bi.get('start')
                 }
                 # 更新中枢高度
-                self.cur_tqn_zs.update({
-                    "height": self.cur_tqn_zs.get('high') - self.cur_tqn_zs.get('low')
+                self.cur_tqa_zs.update({
+                    "height": self.cur_tqa_zs.get('high') - self.cur_tqa_zs.get('low')
                 })
                 return
 
             # 下跌中 1-3，2-4 形成重叠
             if first_third_low <= second_four_low < first_third_high <= second_four_high:
                 # 中枢的方向按照第四笔
-                self.cur_tqn_zs = {
+                self.cur_tqa_zs = {
                     "direction": four_bi.get('direction'),  # 段的方向：进入笔的方向
                     "start": four_bi.get('end'),  # zs的开始
                     "end": cur_bi.get("end"),  # zs的结束时间
@@ -1748,8 +1748,8 @@ class CtaLineBar(object):
                     "exit_start": cur_bi.get('start')
                 }
                 # 更新中枢高度
-                self.cur_tqn_zs.update({
-                    "height": self.cur_tqn_zs.get('high') - self.cur_tqn_zs.get('low')
+                self.cur_tqa_zs.update({
+                    "height": self.cur_tqa_zs.get('high') - self.cur_tqa_zs.get('low')
                 })
 
             return
@@ -1757,112 +1757,112 @@ class CtaLineBar(object):
         # 当前存在中枢
 
         # 最后一笔是多，且低点在中枢高点上方，中枢确认结束
-        if direction == 1 and cur_bi.get('low') > self.cur_tqn_zs.get('high'):
+        if direction == 1 and cur_bi.get('low') > self.cur_tqa_zs.get('high'):
             self.export_tqa_zs()
-            self.cur_tqn_zs = {}
+            self.cur_tqa_zs = {}
             return
 
         # 最后一笔是空，且高点在中枢下方，中枢确认结束
-        if direction == -1 and cur_bi.get('high') < self.cur_tqn_zs.get('low'):
+        if direction == -1 and cur_bi.get('high') < self.cur_tqa_zs.get('low'):
             self.export_tqa_zs()
-            self.cur_tqn_zs = {}
+            self.cur_tqa_zs = {}
             return
 
         # 当前笔，是zs的最后一笔
-        if cur_bi.get("start") == self.cur_tqn_zs.get("exit_start"):
+        if cur_bi.get("start") == self.cur_tqa_zs.get("exit_start"):
             # 当前笔是做多,判断是否创新高
 
             if direction == 1:
                 # 对比中枢之前所有的确认高点，不能超过
-                zs_highs = self.cur_tqn_zs.get("highs", [self.cur_tqn_zs.get('high')])
+                zs_highs = self.cur_tqa_zs.get("highs", [self.cur_tqa_zs.get('high')])
                 min_high = min(zs_highs)
                 new_high = min(min_high, cur_bi.get('high'))
 
                 # 当前笔的高度为最短，在生长，则更新中枢的结束时间和高度
-                if min_high >= new_high > self.cur_tqn_zs.get('high'):
-                    self.cur_tqn_zs.update({
+                if min_high >= new_high > self.cur_tqa_zs.get('high'):
+                    self.cur_tqa_zs.update({
                         "end": cur_bi.get('end'),
                         "high": new_high})
                     # 更新中枢高度
-                    self.cur_tqn_zs.update({
-                        "height": self.cur_tqn_zs.get('high') - self.cur_tqn_zs.get('low')
+                    self.cur_tqa_zs.update({
+                        "height": self.cur_tqa_zs.get('high') - self.cur_tqa_zs.get('low')
                     })
             else:
                 # 对比中枢之前所有的确认低点，不能超过
-                zs_lows = self.cur_tqn_zs.get("lows", [self.cur_tqn_zs.get('low')])
+                zs_lows = self.cur_tqa_zs.get("lows", [self.cur_tqa_zs.get('low')])
                 max_low = max(zs_lows)
                 new_low = max(max_low, cur_bi.get('low'))
                 # 下跌笔在生长，中枢底部在扩展
-                if max_low < new_low < self.cur_tqn_zs.get('low'):
-                    self.cur_tqn_zs.update({
+                if max_low < new_low < self.cur_tqa_zs.get('low'):
+                    self.cur_tqa_zs.update({
                         "end": cur_bi.get('end'),
                         "low": new_low})
                     # 更新中枢高度
-                    self.cur_tqn_zs.update({
-                        "height": self.cur_tqn_zs.get('high') - self.cur_tqn_zs.get('low')
+                    self.cur_tqa_zs.update({
+                        "height": self.cur_tqa_zs.get('high') - self.cur_tqa_zs.get('low')
                     })
 
         # 当前笔 不是中枢最后一笔， 方向是回归中枢的
         else:
             # 向下的一笔，且回落中枢高位下方，变成中枢的最后一笔
-            if direction == -1 and cur_bi.get('low') < self.cur_tqn_zs.get('high') \
-                    and cur_bi.get('high') > self.cur_tqn_zs.get('low'):
+            if direction == -1 and cur_bi.get('low') < self.cur_tqa_zs.get('high') \
+                    and cur_bi.get('high') > self.cur_tqa_zs.get('low'):
                 # 对比中枢之前所有的确认低点，不能超过
-                zs_lows = self.cur_tqn_zs.get("lows", [self.cur_tqn_zs.get('low')])
+                zs_lows = self.cur_tqa_zs.get("lows", [self.cur_tqa_zs.get('low')])
                 max_low = max(zs_lows)
                 new_low = max(max_low, cur_bi.get('low'))
                 # 下跌笔在生长，中枢底部在扩展
-                if max_low < new_low < self.cur_tqn_zs.get('low'):
-                    self.cur_tqn_zs.update({
+                if max_low < new_low < self.cur_tqa_zs.get('low'):
+                    self.cur_tqa_zs.update({
                         "end": cur_bi.get('end'),
                         "low": new_low})
                     # 更新中枢高度
-                    self.cur_tqn_zs.update({
-                        "height": self.cur_tqn_zs.get('high') - self.cur_tqn_zs.get('low')
+                    self.cur_tqa_zs.update({
+                        "height": self.cur_tqa_zs.get('high') - self.cur_tqa_zs.get('low')
                     })
 
                 # 更新中枢的确认高点，更新最后一笔
-                zs_highs = self.cur_tqn_zs.get("highs", [self.cur_tqn_zs.get('high')])
+                zs_highs = self.cur_tqa_zs.get("highs", [self.cur_tqa_zs.get('high')])
                 zs_highs.append(cur_bi.get('high'))
-                self.cur_tqn_zs.update({
+                self.cur_tqa_zs.update({
                     "highs": zs_highs,  # 确认的高点清单（后续不能超过）
                     "exit_direction": cur_bi.get('direction'),  # 离开笔的方向
                     "exit_start": cur_bi.get('start')
                 })
 
                 # 最后一笔的时间，若比中枢的结束时间晚，就更新
-                if self.cur_tqn_zs.get('end') < cur_bi.get('start'):
-                    self.cur_tqn_zs.update({"end": cur_bi.get("start")})
+                if self.cur_tqa_zs.get('end') < cur_bi.get('start'):
+                    self.cur_tqa_zs.update({"end": cur_bi.get("start")})
 
             # 向上的一笔，回抽中枢下轨上方，变成中枢的一笔
-            if direction == 1 and cur_bi.get('high') > self.cur_tqn_zs.get('low') \
-                    and cur_bi.get('low') < self.cur_tqn_zs.get('high'):
+            if direction == 1 and cur_bi.get('high') > self.cur_tqa_zs.get('low') \
+                    and cur_bi.get('low') < self.cur_tqa_zs.get('high'):
                 # 对比中枢之前所有的确认高点，不能超过
-                zs_highs = self.cur_tqn_zs.get("highs", [self.cur_tqn_zs.get('high')])
+                zs_highs = self.cur_tqa_zs.get("highs", [self.cur_tqa_zs.get('high')])
                 min_high = min(zs_highs)
                 new_high = min(min_high, cur_bi.get('high'))
 
                 # 当前笔的高度为最短，在生长，则更新中枢的结束时间和高度
-                if min_high >= new_high > self.cur_tqn_zs.get('high'):
-                    self.cur_tqn_zs.update({
+                if min_high >= new_high > self.cur_tqa_zs.get('high'):
+                    self.cur_tqa_zs.update({
                         "end": cur_bi.get('end'),
                         "high": new_high})
                     # 更新中枢高度
-                    self.cur_tqn_zs.update({
-                        "height": self.cur_tqn_zs.get('high') - self.cur_tqn_zs.get('low')
+                    self.cur_tqa_zs.update({
+                        "height": self.cur_tqa_zs.get('high') - self.cur_tqa_zs.get('low')
                     })
 
                 # 更新中枢的确认低点，更新最后一笔
-                zs_lows = self.cur_tqn_zs.get("lows", [self.cur_tqn_zs.get('low')])
+                zs_lows = self.cur_tqa_zs.get("lows", [self.cur_tqa_zs.get('low')])
                 zs_lows.append(cur_bi.get('low'))
-                self.cur_tqn_zs.update({
+                self.cur_tqa_zs.update({
                     "lows": zs_lows,  # 确认的低点清单（后续不能超过）
                     "exit_direction": cur_bi.get('direction'),  # 离开笔的方向
                     "exit_start": cur_bi.get('start')
                 })
                 # 最后一笔的时间，若比中枢的结束时间晚，就更新
-                if self.cur_tqn_zs.get('end') < cur_bi.get('start'):
-                    self.cur_tqn_zs.update({"end": cur_bi.get("start")})
+                if self.cur_tqa_zs.get('end') < cur_bi.get('start'):
+                    self.cur_tqa_zs.update({"end": cur_bi.get("start")})
 
     def export_tqa_zs(self):
         """
@@ -1872,12 +1872,12 @@ class CtaLineBar(object):
         if self.export_tqa_zs_filename is None:
             return
 
-        if len(self.cur_tqn_zs) < 1:
+        if len(self.cur_tqa_zs) < 1:
             return
 
         # 将当前中枢的信息写入
         self.append_data(file_name=self.export_tqa_zs_filename,
-                         dict_data=self.cur_tqn_zs,
+                         dict_data=self.cur_tqa_zs,
                          field_names=["start", "end", "direction", "height", "high", "low"]
                          )
 
@@ -2173,14 +2173,16 @@ class CtaLineBar(object):
             golden_cross = False
             dead_cross = False
 
-            if self.line_ma1[-1] > self.line_ma1[-2] \
-                    and self.line_ma1[-1] > self.line_ma2[-1] \
-                    and self.line_ma1[-2] <= self.line_ma2[-2]:
+            # if self.line_ma1[-1] > self.line_ma1[-2] \
+            #         and self.line_ma1[-1] > self.line_ma2[-1] \
+            #         and self.line_ma1[-2] <= self.line_ma2[-2]:
+            if self.ma12_count <=0 and self.line_ma1[-1] > self.line_ma2[-1]:
                 golden_cross = True
 
-            if self.line_ma1[-1] < self.line_ma1[-2] \
-                    and self.line_ma1[-1] < self.line_ma2[-1] \
-                    and self.line_ma1[-2] >= self.line_ma2[-2]:
+            # if self.line_ma1[-1] < self.line_ma1[-2] \
+            #         and self.line_ma1[-1] < self.line_ma2[-1] \
+            #         and self.line_ma1[-2] >= self.line_ma2[-2]:
+            if self.ma12_count >=0 and self.line_ma1[-1] < self.line_ma2[-1]:
                 dead_cross = True
 
             if self.ma12_count <= 0:
@@ -2212,14 +2214,16 @@ class CtaLineBar(object):
         if len(self.line_ma2) >= 2 and len(self.line_ma3) > 2:
             golden_cross = False
             dead_cross = False
-            if self.line_ma2[-1] > self.line_ma2[-2] \
-                    and self.line_ma2[-1] > self.line_ma3[-1] \
-                    and self.line_ma2[-2] <= self.line_ma3[-2]:
+            # if self.line_ma2[-1] > self.line_ma2[-2] \
+            #         and self.line_ma2[-1] > self.line_ma3[-1] \
+            #         and self.line_ma2[-2] <= self.line_ma3[-2]:
+            if self.ma23_count <=0 and self.line_ma2[-1] > self.line_ma3[-1]:
                 golden_cross = True
 
-            if self.line_ma2[-1] < self.line_ma2[-2] \
-                    and self.line_ma2[-1] < self.line_ma3[-1] \
-                    and self.line_ma2[-2] >= self.line_ma3[-2]:
+            # if self.line_ma2[-1] < self.line_ma2[-2] \
+            #         and self.line_ma2[-1] < self.line_ma3[-1] \
+            #         and self.line_ma2[-2] >= self.line_ma3[-2]:
+            if self.ma23_count >= 0 and self.line_ma2[-1] < self.line_ma3[-1]:
                 dead_cross = True
 
             if self.ma23_count <= 0:
@@ -2251,14 +2255,16 @@ class CtaLineBar(object):
         if len(self.line_ma1) >= 2 and len(self.line_ma3) > 2:
             golden_cross = False
             dead_cross = False
-            if self.line_ma1[-1] > self.line_ma1[-2] \
-                    and self.line_ma1[-1] > self.line_ma3[-1] \
-                    and self.line_ma1[-2] <= self.line_ma3[-2]:
+            # if self.line_ma1[-1] > self.line_ma1[-2] \
+            #         and self.line_ma1[-1] > self.line_ma3[-1] \
+            #         and self.line_ma1[-2] <= self.line_ma3[-2]:
+            if self.ma13_count <=0 and self.line_ma1[-1] > self.line_ma3[-1]:
                 golden_cross = True
 
-            if self.line_ma1[-1] < self.line_ma1[-2] \
-                    and self.line_ma1[-1] < self.line_ma3[-1] \
-                    and self.line_ma1[-2] >= self.line_ma3[-2]:
+            # if self.line_ma1[-1] < self.line_ma1[-2] \
+            #         and self.line_ma1[-1] < self.line_ma3[-1] \
+            #         and self.line_ma1[-2] >= self.line_ma3[-2]:
+            if self.ma13_count >=0 and self.line_ma1[-1] < self.line_ma3[-1]:
                 dead_cross = True
 
             if self.ma13_count <= 0:
@@ -4123,7 +4129,7 @@ class CtaLineBar(object):
                 return False
 
             # 底部背离，只能在零轴下方才判断
-            if s1_dif_min > 0 or s1_dif_min > 0:
+            if s1_dif_min > 0 or s2_dif_min > 0:
                 return False
 
             # 价格创新低，dif没有创新低
@@ -5570,13 +5576,15 @@ class CtaLineBar(object):
         """返回段得平均高度"""
         if not self.chanlun_calculated:
             self.__count_chanlun()
-        return round(sum([d.height for d in self.duan_list[-duan_len:]]) / duan_len, self.round_n)
+        duan_list = self.duan_list[-duan_len:]
+        return round(sum([d.height for d in duan_list]) / max(1,len(duan_list)), self.round_n)
 
     def bi_height_ma(self, bi_len=20):
         """返回分笔得平均高度"""
         if not self.chanlun_calculated:
             self.__count_chanlun()
-        return round(sum([bi.height for bi in self.bi_list[-bi_len:]]) / bi_len, self.round_n)
+        bi_list = self.bi_list[-bi_len:]
+        return round(sum([bi.height for bi in bi_list]) / max(1,len(bi_list)), self.round_n)
 
     def export_chan(self):
         """
