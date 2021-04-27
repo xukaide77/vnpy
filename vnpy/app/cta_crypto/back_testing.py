@@ -1798,7 +1798,7 @@ class BackTestingEngine(object):
             # 计算每个策略实例的持仓盈亏
             strategy_pnl.update({longpos.strategy_name: strategy_pnl.get(longpos.strategy_name, 0) + holding_profit})
 
-            positionMsg += "{},long,p={},v={},m={};".format(symbol, longpos.price, longpos.volume, holding_profit)
+            positionMsg += "{},long,p={},v={},m={};\n".format(symbol, longpos.price, longpos.volume, holding_profit)
 
         for shortpos in self.short_position_list:
 
@@ -1815,7 +1815,7 @@ class BackTestingEngine(object):
             # 计算每个策略实例的持仓盈亏
             strategy_pnl.update({shortpos.strategy_name: strategy_pnl.get(shortpos.strategy_name, 0) + holding_profit})
 
-            positionMsg += "{},short,p={},v={},m={};".format(symbol, shortpos.price, shortpos.volume, holding_profit)
+            positionMsg += "{},short,p={},v={},m={};\n".format(symbol, shortpos.price, shortpos.volume, holding_profit)
 
         data['net'] = c + today_holding_profit  # 当日净值（含持仓盈亏）
         data['rate'] = (c + today_holding_profit) / self.init_capital

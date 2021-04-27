@@ -502,7 +502,7 @@ class CtaStockTemplate(CtaTemplate):
     def load_klines_from_cache(self, kline_names: list = []):
         """
         从缓存加载K线数据
-        :param kline_names:
+        :param kline_names: 指定需要加载的k线名称列表
         :return:
         """
         if len(kline_names) == 0:
@@ -1263,12 +1263,13 @@ class CtaStockTemplate(CtaTemplate):
                     self.active_orders.update({vt_orderid: order_info})
                     ret = self.cancel_order(str(vt_orderid))
                     if not ret:
-                        self.write_log(u'撤单失败,更新状态为撤单成功')
-                        order_info.update({'status': Status.CANCELLED})
-                        self.active_orders.update({vt_orderid: order_info})
-                        if order_grid:
-                            if vt_orderid in order_grid.order_ids:
-                                order_grid.order_ids.remove(vt_orderid)
+                        self.write_log(f'撤单失败:{order_info}')
+                        # self.write_log(u'撤单失败,更新状态为撤单成功')
+                        # order_info.update({'status': Status.CANCELLED})
+                        # self.active_orders.update({vt_orderid: order_info})
+                        # if order_grid:
+                        #     if vt_orderid in order_grid.order_ids:
+                        #         order_grid.order_ids.remove(vt_orderid)
 
                 continue
 

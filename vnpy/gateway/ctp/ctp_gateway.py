@@ -340,6 +340,13 @@ class CtpGateway(BaseGateway):
 
         for (vt_symbol, is_bar) in list(self.subscribed_symbols):
             symbol, exchange = extract_vt_symbol(vt_symbol)
+            # 获取合约的缩写号
+            underlying_symbol = get_underlying_symbol(vt_symbol)
+            dt = datetime.now()
+            # 若为中金所等的合约，白天才提交订阅请求
+            if underlying_symbol in MARKET_DAY_ONLY and not (8 < dt.hour < 16):
+                continue
+
             req = SubscribeRequest(
                 symbol=symbol,
                 exchange=exchange,
@@ -600,6 +607,7 @@ class CtpMdApi(MdApi):
         Callback when front server is connected.
         """
         self.gateway.write_log(f"{self.name}行情服务器连接成功")
+        self.connect_status = True
         self.login()
         self.gateway.status.update(
             {f'{self.name}md_con': True, f'{self.name}md_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
@@ -609,6 +617,7 @@ class CtpMdApi(MdApi):
         Callback when front server is disconnected.
         """
         self.login_status = False
+        self.connect_status = False
         self.gateway.write_log(f"{self.name}行情服务器连接断开，原因{reason}")
         self.gateway.status.update(
             {f'{self.name}md_con': False, f'{self.name}md_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
@@ -814,27 +823,31 @@ class CtpTdApi(TdApi):
     def onFrontConnected(self):
         """"""
         self.gateway.write_log("交易服务器连接成功")
-
+        self.connect_status = True
         if self.auth_code:
+            self.gateway.write_log("向交易服务器提交授权码验证")
             self.authenticate()
         else:
+            self.gateway.write_log("向交易服务器进行帐号登录")
             self.login()
-            self.gateway.status.update({'td_con': True, 'td_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+
 
     def onFrontDisconnected(self, reason: int):
         """"""
         self.login_status = False
         self.gateway.write_log(f"交易服务器连接断开，原因{reason}")
-        self.gateway.status.update({'td_con': True, 'td_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+        self.gateway.status.update({'td_con': False, 'td_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
     def onRspAuthenticate(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
         if not error['ErrorID']:
             self.auth_staus = True
             self.gateway.write_log("交易服务器授权验证成功")
+            self.gateway.status.update({"td_auth": True})
             self.login()
         else:
             self.gateway.write_error("交易服务器授权验证失败", error)
+            self.gateway.status.update({"td_auth":False})
 
     def onRspUserLogin(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -842,7 +855,8 @@ class CtpTdApi(TdApi):
             self.frontid = data["FrontID"]
             self.sessionid = data["SessionID"]
             self.login_status = True
-            self.gateway.write_log("交易服务器登录成功")
+            self.gateway.status.update({'td_con': True, 'td_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+            self.gateway.write_log("交易帐号登录完成")
 
             # Confirm settlement
             req = {
@@ -853,7 +867,7 @@ class CtpTdApi(TdApi):
             self.reqSettlementInfoConfirm(req, self.reqid)
         else:
             self.login_failed = True
-
+            self.gateway.status.update({'td_con': False,'td_login_fail_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
             self.gateway.write_error("交易服务器登录失败", error)
 
     def onRspOrderInsert(self, data: dict, error: dict, reqid: int, last: bool):
@@ -975,7 +989,12 @@ class CtpTdApi(TdApi):
                     if act_symbol != pas_symbol:
                         self.gateway.subscribe(SubscribeRequest(symbol=position.symbol, exchange=position.exchange))
                 else:
-                    self.gateway.subscribe(SubscribeRequest(symbol=position.symbol, exchange=position.exchange))
+                    # 获取合约的缩写号
+                    underlying_symbol = get_underlying_symbol(position.symbol)
+                    dt = datetime.now()
+                    # 若为中金所等的合约，白天才提交订阅请求
+                    if not (underlying_symbol in MARKET_DAY_ONLY and not (8 < dt.hour < 16)):
+                        self.gateway.subscribe(SubscribeRequest(symbol=position.symbol, exchange=position.exchange))
 
         if last:
             self.long_option_cost = None
@@ -1267,7 +1286,7 @@ class CtpTdApi(TdApi):
 
             self.registerFront(address)
             self.init()
-
+            self.gateway.write_log(f'交易前端连接成功')
             self.connect_status = True
         else:
             self.authenticate()
@@ -1276,6 +1295,7 @@ class CtpTdApi(TdApi):
         """
         Authenticate with auth_code and appid.
         """
+
         req = {
             "UserID": self.userid,
             "BrokerID": self.brokerid,
@@ -1782,7 +1802,13 @@ class TdxMdApi():
                 continue
 
             # self.gateway.write_log(f'{tick.__dict__}')
+            pre_tick = self.symbol_tick_dict.get(tick.symbol, None)
             self.symbol_tick_dict[tick.symbol] = tick
+
+            # 排除指数的异常数据(tdx有些服务器异常，返回数据偏差超过上一tick的20%）
+            if pre_tick:
+                if tick.last_price > pre_tick.last_price * 1.2 or tick.last_price < pre_tick.last_price * 0.8:
+                    continue
 
             self.gateway.on_tick(tick)
             self.gateway.on_custom_tick(tick)
@@ -1854,7 +1880,13 @@ class SubMdApi():
             if len(tick.trading_day) == 0:
                 tick.trading_day = get_trading_date(dt)
 
+            pre_tick = self.symbol_tick_dict.get(symbol,None)
             self.symbol_tick_dict[symbol] = tick
+            # 排除指数的异常数据(tdx有些服务器异常，返回数据偏差超过上一tick的20%）
+            if pre_tick:
+                if tick.last_price > pre_tick.last_price * 1.2 or tick.last_price < pre_tick.last_price * 0.8:
+                    return
+
             self.gateway.on_tick(tick)
             self.gateway.on_custom_tick(tick)
 

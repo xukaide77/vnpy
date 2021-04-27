@@ -24,7 +24,7 @@ from vnpy.amqp.producer import publisher
 from vnpy.amqp.consumer import worker
 
 APP_NAME = 'Stock_Publisher'
-REST_HOST = 'http://49.234.35.135:8005'
+REST_HOST = 'http://49.234.35.135:8006'
 SUBSCRIBE_FILE = 'today_subscribe.json'
 
 # 市场交易代码 => vnpy

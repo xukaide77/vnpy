@@ -407,7 +407,9 @@ class TdxFutureData(object):
         else:
             tdx_symbol = get_full_symbol(symbol).upper()
 
+        # 查询合约 => 指数合约, 主要是用来获取市场
         tdx_index_symbol = underlying_symbol + 'L9'
+        # 合约缩写 => 交易所
         vn_exchange = self._get_vn_exchange(underlying_symbol)
 
         self.connect()
@@ -441,19 +443,20 @@ class TdxFutureData(object):
             _bars = []
             _pos = 0
             while _start_date > qry_start_date:
+                # 利用api查询历史数据
                 _res = self.api.get_instrument_bars(
-                    tdx_period,
-                    self.symbol_market_dict.get(tdx_index_symbol, 0),
-                    tdx_symbol,
-                    _pos,
-                    QSIZE)
+                    category=tdx_period,
+                    market=self.symbol_market_dict.get(tdx_index_symbol, 0),
+                    code=tdx_symbol,
+                    start=_pos,
+                    count=QSIZE)
                 if _res is not None:
                     _bars = _res + _bars
                 _pos += QSIZE
                 if _res is not None and len(_res) > 0:
                     _start_date = _res[0]['datetime']
                     _start_date = datetime.strptime(_start_date, '%Y-%m-%d %H:%M')
-                    self.write_log(u'分段取数据开始:{}'.format(_start_date))
+                    self.write_log(u'分段取{}数据,开始时间:{}'.format(tdx_symbol, _start_date))
                 else:
                     break
             if len(_bars) == 0:

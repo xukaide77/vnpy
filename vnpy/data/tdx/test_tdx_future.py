@@ -28,6 +28,9 @@ api_01 = TdxFutureData(strategy=t1)
 # 获取某个合约得最新价
 #price = api_01.get_price('rb2010')
 #print('price={}'.format(price))
+ret, bars = api_01.get_bars('rb2105.SHFE',period='1min')
+for bar in bars:
+    print(bar.__dict__)
 
 
 # 获取主力合约

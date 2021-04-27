@@ -933,8 +933,8 @@ class CtaEngine(BaseEngine):
         except Exception:
             strategy.trading = False
             strategy.inited = False
-
-            msg = f"触发异常已停止\n{traceback.format_exc()}"
+            account_id = self.engine_config.get('accountid', '-')
+            msg = f"{account_id}/{strategy.strategy_name}触发异常已停止\n{traceback.format_exc()}"
             self.write_log(msg=msg,
                            strategy_name=strategy.strategy_name,
                            level=logging.CRITICAL)

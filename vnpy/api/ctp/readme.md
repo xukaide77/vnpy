@@ -41,6 +41,7 @@
  
   
  #linux编译
+ 
     1. 复制so文件到ctp根目录，并改名
        mv thostmduserapi_se.so libthostmduserapi_se.so 
        mv thosttraderapi_se.so libthosttraderapi_se.so
