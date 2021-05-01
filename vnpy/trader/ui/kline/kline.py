@@ -1076,7 +1076,7 @@ class KLineWidget(KeyWraper):
 
     def add_signal(self, t_value, direction, offset, price, volume):
         """
-        增加信号
+        增加信号显示 =》 箭头,
         :param t_value:
         :param direction:
         :param offset:
@@ -1109,6 +1109,8 @@ class KLineWidget(KeyWraper):
             trade_node['signals'].append({'direction': direction, 'offset': offset, 'price': price, 'volume': volume})
             self.x_t_trade_map[x] = bar_time
 
+        color = (200, 200, 200)
+
         # 需要显示图标
         if need_plot_arrow:
             arrow = None
@@ -1118,6 +1120,7 @@ class KLineWidget(KeyWraper):
                     # buy
                     arrow = pg.ArrowItem(pos=(x, price), angle=135, brush=None, pen={'color': 'y', 'width': 2},
                                          tipAngle=30, baseAngle=20, tailLen=10, tailWidth=2)
+                    color = 'r'
                     # d = {
                     #    "pos": (x, price),
                     #    "data": 1,
@@ -1132,21 +1135,26 @@ class KLineWidget(KeyWraper):
                     # cover
                     arrow = pg.ArrowItem(pos=(x, price), angle=0, brush='y', pen=None, headLen=20, headWidth=20,
                                          tailLen=10, tailWidth=2)
+                    color = 'r'
             # 空信号
             elif direction == Direction.SHORT:
                 if offset == Offset.CLOSE:
                     # sell
                     arrow = pg.ArrowItem(pos=(x, price), angle=0, brush='g', pen=None, headLen=20, headWidth=20,
                                          tailLen=10, tailWidth=2)
+                    color = 'g'
                 else:
                     # short
                     arrow = pg.ArrowItem(pos=(x, price), angle=-135, brush=None, pen={'color': 'g', 'width': 2},
                                          tipAngle=30, baseAngle=20, tailLen=10, tailWidth=2)
+                    color = 'g'
             if arrow:
                 self.pi_main.addItem(arrow)
                 self.list_trade_arrow.append(arrow)
 
-    def add_trades(self, df_trades,include_symbols=[], exclude_symbols=[]):
+        self.add_markup(t_value=t_value, price=price, txt=f'[{volume}]', color=color)
+
+    def add_trades(self, df_trades, include_symbols=[], exclude_symbols=[]):
         """
         批量导入交易记录（vnpy回测中导出的trade.csv)
         :param df_trades:
@@ -1163,7 +1171,7 @@ class KLineWidget(KeyWraper):
         for idx in df_trades.index:
 
             # 要显示的合约
-            symbol =  df_trades['symbol'].loc[idx]
+            symbol = df_trades['symbol'].loc[idx]
             if len(include_symbols) > 0 and symbol not in include_symbols:
                 continue
 
@@ -1188,7 +1196,7 @@ class KLineWidget(KeyWraper):
                 offset = Offset.CLOSE
 
             volume = df_trades['volume'].loc[idx]
-
+            volume = round(volume, 2)
             # 添加开仓信号
             self.add_signal(t_value=trade_time, direction=direction, offset=offset, price=price,
                             volume=volume)
@@ -1224,7 +1232,7 @@ class KLineWidget(KeyWraper):
 
             close_price = df_trade_list['close_price'].loc[idx]
             volume = df_trade_list['volume'].loc[idx]
-
+            volume = round(volume,2)
             # 添加开仓信号
             self.add_signal(t_value=open_time, direction=open_direction, offset=Offset.OPEN, price=open_price,
                             volume=volume)
@@ -1306,7 +1314,7 @@ class KLineWidget(KeyWraper):
                             'start_x': start_x, 'end_x': end_x,
                             'tns_type': tns_type, 'completed': True})
 
-    def add_markup(self, t_value, price, txt):
+    def add_markup(self, t_value, price, txt, color=(200,200,200)):
         """
         添加标记
         :param t_value: 时间-》坐标x
@@ -1344,7 +1352,7 @@ class KLineWidget(KeyWraper):
         if 'textitem' in markup_node:
             markup_node['textitem'].setText(';'.join(markup_node.get('markup', [])))
         else:
-            textitem = pg.TextItem(markup_node['markup'][0])
+            textitem = pg.TextItem(text=markup_node['markup'][0], color=color)
             textitem.setPos(x, price)
             markup_node['textitem'] = textitem
             self.list_markup.append(textitem)
@@ -1384,8 +1392,7 @@ class KLineWidget(KeyWraper):
 
                 self.add_markup(t_value=t_value, price=price, txt=markup_text)
 
-
-    def add_bi(self, df_bi, color='b', style= None):
+    def add_bi(self, df_bi, color='b', style=None):
         """
         添加缠论_笔（段）_画线
         # direction,(1/-1)，start, end, high, low
@@ -1401,10 +1408,17 @@ class KLineWidget(KeyWraper):
 
             start_time = row['start']
             if not isinstance(start_time, datetime) and isinstance(start_time, str):
+                if '.' in start_time:
+                    start_time = start_time.split('.')[0]
+                    # start_time = datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S.%f')
                 start_time = datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
 
             end_time = row['end']
             if not isinstance(end_time, datetime) and isinstance(end_time, str):
+                if '.' in end_time:
+                    end_time = end_time.split('.')[0]
+                    # end_time = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S.%f')
+
                 end_time = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
 
             start_x = self.axisTime.get_x_by_time(start_time)
@@ -1425,7 +1439,6 @@ class KLineWidget(KeyWraper):
             bi = pg.GraphItem(pos=pos, adj=np.array([[0, 1]]), pen=pen)
             self.pi_main.addItem(bi)
 
-
     def add_zs(self, df_zs, color='y'):
         """
         添加缠论中枢_画线
@@ -1438,15 +1451,15 @@ class KLineWidget(KeyWraper):
             print(u'No datas exist', file=sys.stderr)
             return
 
-        for index,row in df_zs.iterrows():
+        for index, row in df_zs.iterrows():
 
             start_time = row['start']
             if not isinstance(start_time, datetime) and isinstance(start_time, str):
-                start_time = datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+                start_time = datetime.strptime(start_time.split('.')[0], '%Y-%m-%d %H:%M:%S')
 
             end_time = row['end']
             if not isinstance(end_time, datetime) and isinstance(end_time, str):
-                end_time = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+                end_time = datetime.strptime(end_time.split('.')[0], '%Y-%m-%d %H:%M:%S')
 
             start_x = self.axisTime.get_x_by_time(start_time)
             end_x = self.axisTime.get_x_by_time(end_time)
@@ -1460,7 +1473,6 @@ class KLineWidget(KeyWraper):
             for pos in [pos_top, pos_buttom, pos_left, pos_right]:
                 line = pg.GraphItem(pos=pos, adj=np.array([[0, 1]]), pen=pen)
                 self.pi_main.addItem(line)
-
 
     def loadData(self, df_datas, main_indicators=[], sub_indicators=[]):
         """
@@ -1508,6 +1520,7 @@ class KLineWidget(KeyWraper):
 
 class GridKline(QtWidgets.QWidget):
     """多kline同时展示，时间联动"""
+
     # kline_setting说明：
     # dict 结构，{图:配置}。  配置，也是dict结构，配置项:配置值
     # 配置项目1：data_file，k线的csv文件，
@@ -1544,7 +1557,7 @@ class GridKline(QtWidgets.QWidget):
     # 配置选项10：dist_include_list， 显示dist数据时，对operation字段需要包含的内容
     # 配置选项11：dist_exclude_list， 显示dist数据时，对operation字段需要排除的内容
 
-    # 配置项12: bi_file / duan_file / bi_zs_file / duan_zs_file，支持缠论的化线
+    # 配置项12: bi_file / duan_file / bi_zs_file / duan_zs_file，支持缠论的画线
 
     def __init__(self, parent=None, kline_settings={}, title='', relocate=True):
         self.parent = parent
@@ -1671,9 +1684,8 @@ class GridKline(QtWidgets.QWidget):
 
                     self.kline_dict[kline_name].add_trades(
                         df_trades=df_trade,
-                        include_symbols=kline_setting.get('trade_include_symbols' ,[]),
+                        include_symbols=kline_setting.get('trade_include_symbols', []),
                         exclude_symbols=kline_setting.get('trade_excclude_symbols', []))
-
 
                 # 加载tns( 回测、实盘产生的）
                 tns_file = kline_setting.get('tns_file', None)
@@ -1690,35 +1702,55 @@ class GridKline(QtWidgets.QWidget):
                     df_markup = df_markup[['datetime', 'price', 'operation']]
                     df_markup.rename(columns={'operation': 'markup'}, inplace=True)
                     self.kline_dict[kline_name].add_markups(df_markup=df_markup,
-                                                       include_list=kline_setting.get('dist_include_list', []),
-                                                       exclude_list=kline_setting.get('dist_exclude_list',['buy', 'short', 'sell', 'cover']))
+                                                            include_list=kline_setting.get('dist_include_list', []),
+                                                            exclude_list=kline_setting.get('dist_exclude_list',
+                                                                                           ['buy', 'short', 'sell',
+                                                                                            'cover']))
 
-                # 笔
+                # 缠论分笔（文件方式）
                 bi_file = kline_setting.get('bi_file', None)
-                if bi_file and os.path.exists(bi_file):
+                if bi_file and os.path.exists(bi_file) and 'bi_dataframe' not in kline_setting:
                     print(f'loading {bi_file}')
                     df_bi = pd.read_csv(bi_file)
-                    self.kline_dict[kline_name].add_bi(df_bi, color='y', style= QtCore.Qt.DashLine)
+                    self.kline_dict[kline_name].add_bi(df_bi, color='y', style=QtCore.Qt.DashLine)
+                # 分笔（dataframe方式）
+                if 'bi_dataframe' in kline_setting:
+                    print(f'loading chanlun bi dataframe')
+                    df_bi = kline_setting.get('bi_dataframe')
+                    self.kline_dict[kline_name].add_bi(df_bi, color='y', style=QtCore.Qt.DashLine)
 
-                # 段
+                # 缠论线段（文件方式）
                 duan_file = kline_setting.get('duan_file', None)
-                if duan_file and os.path.exists(duan_file):
+                if duan_file and os.path.exists(duan_file) and 'duan_dataframe' not in kline_setting:
                     print(f'loading {duan_file}')
                     df_duan = pd.read_csv(duan_file)
                     self.kline_dict[kline_name].add_bi(df_duan, color='b')
+                # 缠论线段（dataframe方式）
+                if 'duan_dataframe' in kline_setting:
+                    print(f'loading chanlun duan dataframe')
+                    df_duan = kline_setting.get('duan_dataframe')
+                    self.kline_dict[kline_name].add_bi(df_duan, color='b')
 
-                # 笔中枢
+                # 分笔中枢
                 bi_zs_file = kline_setting.get('bi_zs_file', None)
-                if bi_zs_file and os.path.exists(bi_zs_file):
+                if bi_zs_file and os.path.exists(bi_zs_file)  and 'bi_zs_dataframe' not in kline_setting:
                     print(f'loading {bi_zs_file}')
                     df_bi_zs = pd.read_csv(bi_zs_file)
+                    self.kline_dict[kline_name].add_zs(df_bi_zs, color='y')
+                if 'bi_zs_dataframe' in kline_setting:
+                    print(f'loading chanlun bi_zs dataframe')
+                    df_bi_zs =kline_setting.get('bi_zs_dataframe')
                     self.kline_dict[kline_name].add_zs(df_bi_zs, color='y')
 
                 # 段中枢
                 duan_zs_file = kline_setting.get('duan_zs_file', None)
-                if duan_zs_file and os.path.exists(duan_zs_file):
+                if duan_zs_file and os.path.exists(duan_zs_file) and 'duan_zs_dataframe' not in kline_setting:
                     print(f'loading {duan_zs_file}')
                     df_duan_zs = pd.read_csv(duan_zs_file)
+                    self.kline_dict[kline_name].add_zs(df_duan_zs, color='b')
+                if 'duan_zs_dataframe' in kline_setting:
+                    print(f'loading chanlun duan_zs dataframe')
+                    df_duan_zs =kline_setting.get('duan_zs_dataframe')
                     self.kline_dict[kline_name].add_zs(df_duan_zs, color='b')
 
         except Exception as ex:
@@ -1745,6 +1777,7 @@ class GridKline(QtWidgets.QWidget):
                 print(f'onRelocate exception:{str(ex)}')
                 traceback.print_exc()
 
+
 class MultiKlineWindow(QtWidgets.QMainWindow):
     """多窗口显示K线
     包括：
@@ -1765,7 +1798,7 @@ class MultiKlineWindow(QtWidgets.QMainWindow):
 
         self.init_ui()
 
-       # self.load_multi_kline()
+    # self.load_multi_kline()
     # ----------------------------------------------------------------------
     def init_ui(self):
         """初始化界面"""
@@ -1856,7 +1889,7 @@ class MultiKlineWindow(QtWidgets.QMainWindow):
 
         self.mdi.cascadeSubWindows()
 
-    def windowaction(self,q):
+    def windowaction(self, q):
         if q.text() == "cascade":
             self.mdi.cascadeSubWindows()
 
@@ -1928,7 +1961,6 @@ class MultiKlineWindow(QtWidgets.QMainWindow):
                                           QtWidgets.QMessageBox.NoButton)
 
             return
-
 
     def closeEvent(self, event):
         """关闭窗口时的事件"""

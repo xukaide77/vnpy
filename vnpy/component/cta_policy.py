@@ -102,7 +102,7 @@ class CtaPolicy(CtaComponent):
 
             json_data = self.to_json()
             json_data['save_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            with open(json_file, 'w') as f:
+            with open(json_file, 'w', encoding='utf8') as f:
                 data = json.dumps(json_data, indent=4, ensure_ascii=False)
                 f.write(data)
 

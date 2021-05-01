@@ -2176,13 +2176,13 @@ class CtaLineBar(object):
             # if self.line_ma1[-1] > self.line_ma1[-2] \
             #         and self.line_ma1[-1] > self.line_ma2[-1] \
             #         and self.line_ma1[-2] <= self.line_ma2[-2]:
-            if self.ma12_count <=0 and self.line_ma1[-1] > self.line_ma2[-1]:
+            if self.ma12_count <= 0 and self.line_ma1[-1] > self.line_ma2[-1]:
                 golden_cross = True
 
             # if self.line_ma1[-1] < self.line_ma1[-2] \
             #         and self.line_ma1[-1] < self.line_ma2[-1] \
             #         and self.line_ma1[-2] >= self.line_ma2[-2]:
-            if self.ma12_count >=0 and self.line_ma1[-1] < self.line_ma2[-1]:
+            if self.ma12_count >= 0 and self.line_ma1[-1] < self.line_ma2[-1]:
                 dead_cross = True
 
             if self.ma12_count <= 0:
@@ -2217,7 +2217,7 @@ class CtaLineBar(object):
             # if self.line_ma2[-1] > self.line_ma2[-2] \
             #         and self.line_ma2[-1] > self.line_ma3[-1] \
             #         and self.line_ma2[-2] <= self.line_ma3[-2]:
-            if self.ma23_count <=0 and self.line_ma2[-1] > self.line_ma3[-1]:
+            if self.ma23_count <= 0 and self.line_ma2[-1] > self.line_ma3[-1]:
                 golden_cross = True
 
             # if self.line_ma2[-1] < self.line_ma2[-2] \
@@ -2258,13 +2258,13 @@ class CtaLineBar(object):
             # if self.line_ma1[-1] > self.line_ma1[-2] \
             #         and self.line_ma1[-1] > self.line_ma3[-1] \
             #         and self.line_ma1[-2] <= self.line_ma3[-2]:
-            if self.ma13_count <=0 and self.line_ma1[-1] > self.line_ma3[-1]:
+            if self.ma13_count <= 0 and self.line_ma1[-1] > self.line_ma3[-1]:
                 golden_cross = True
 
             # if self.line_ma1[-1] < self.line_ma1[-2] \
             #         and self.line_ma1[-1] < self.line_ma3[-1] \
             #         and self.line_ma1[-2] >= self.line_ma3[-2]:
-            if self.ma13_count >=0 and self.line_ma1[-1] < self.line_ma3[-1]:
+            if self.ma13_count >= 0 and self.line_ma1[-1] < self.line_ma3[-1]:
                 dead_cross = True
 
             if self.ma13_count <= 0:
@@ -4053,7 +4053,7 @@ class CtaLineBar(object):
             return self.line_macd[-1]
         return self._rt_macd
 
-    def is_dif_divergence(self, direction,s1_time=None, s2_time=None):
+    def is_dif_divergence(self, direction, s1_time=None, s2_time=None):
         """
         检查MACD DIF是否与价格有背离
         :param: direction，多：检查是否有顶背离，空，检查是否有底背离
@@ -5515,16 +5515,24 @@ class CtaLineBar(object):
         if self.chan_graph is not None:
             del self.chan_graph
             self.chan_graph = None
+
+        # 缠论图形，只用到K线的高点、低点。(没有使用实时值)
         self.chan_graph = ChanGraph(chan_lib=self.chan_lib,
                                     index=self.index_list[-self.bar_len + 1:],
                                     high=self.high_array[-self.bar_len + 1:],
                                     low=self.low_array[-self.bar_len + 1:])
+        # 分型
         self._fenxing_list = self.chan_graph.fenxing_list
+        # 分笔列表
         self._bi_list = self.chan_graph.bi_list
+        # 笔中枢列表
         self._bi_zs_list = self.chan_graph.bi_zhongshu_list
+        # 线段
         self._duan_list = self.chan_graph.duan_list
+        # 段中枢列表
         self._duan_zs_list = self.chan_graph.duan_zhongshu_list
 
+        # 当前bar已计算
         self.chanlun_calculated = True
 
     @property
@@ -5540,10 +5548,20 @@ class CtaLineBar(object):
         return self._bi_list
 
     @property
+    def cur_bi(self):
+        """当前笔"""
+        return self.bi_list[-1] if len(self.bi_list) > 0 else None
+
+    @property
     def bi_zs_list(self):
         if not self.chanlun_calculated:
             self.__count_chanlun()
         return self._bi_zs_list
+
+    @property
+    def cur_bi_zs(self):
+        """当前笔中枢"""
+        return self.bi_zs_list[-1] if len(self.bi_zs_list) > 0 else None
 
     @property
     def duan_list(self):
@@ -5572,19 +5590,30 @@ class CtaLineBar(object):
             self.__count_chanlun()
         return self._duan_zs_list
 
+    @property
+    def duan_zs_list(self):
+        if not self.chanlun_calculated:
+            self.__count_chanlun()
+        return self._duan_zs_list
+
+    @property
+    def cur_duan_zs(self):
+        """当前段中枢"""
+        return self.duan_zs_list[-1] if len(self.duan_zs_list) > 0 else None
+
     def duan_height_ma(self, duan_len=20):
         """返回段得平均高度"""
         if not self.chanlun_calculated:
             self.__count_chanlun()
         duan_list = self.duan_list[-duan_len:]
-        return round(sum([d.height for d in duan_list]) / max(1,len(duan_list)), self.round_n)
+        return round(sum([d.height for d in duan_list]) / max(1, len(duan_list)), self.round_n)
 
     def bi_height_ma(self, bi_len=20):
         """返回分笔得平均高度"""
         if not self.chanlun_calculated:
             self.__count_chanlun()
         bi_list = self.bi_list[-bi_len:]
-        return round(sum([bi.height for bi in bi_list]) / max(1,len(bi_list)), self.round_n)
+        return round(sum([bi.height for bi in bi_list]) / max(1, len(bi_list)), self.round_n)
 
     def export_chan(self):
         """
@@ -5607,12 +5636,13 @@ class CtaLineBar(object):
             for bi in bi_list:
                 self.append_data(
                     file_name=self.export_bi_filename,
-                    dict_data={"start":bi.start, "end":bi.end, "direction":int(bi.direction), "height":float(bi.high-bi.low), "high":float(bi.high), "low":float(bi.low)},
+                    dict_data={"start": bi.start, "end": bi.end, "direction": int(bi.direction),
+                               "height": float(bi.high - bi.low), "high": float(bi.high), "low": float(bi.low)},
                     field_names=["start", "end", "direction", "height", "high", "low"]
                 )
                 self.pre_bi_start = bi.start
 
-        if self.export_zs_filename :
+        if self.export_zs_filename:
             # csv 文件 "start", "end", "direction", "height", "high", "low"
             # 获取最后记录的start 开始时间
             if self.pre_zs_start is None:
@@ -5640,11 +5670,13 @@ class CtaLineBar(object):
                     self.pre_duan_start = self.pre_duan_start.strftime("%Y-%m-%d %H:%M:%S")
 
             # 获取所有未写入文件的笔
-            duan_list = [duan for duan in self.duan_list[:-1] if (not self.pre_duan_start) or duan.start > self.pre_duan_start]
+            duan_list = [duan for duan in self.duan_list[:-1] if
+                         (not self.pre_duan_start) or duan.start > self.pre_duan_start]
             for duan in duan_list:
                 self.append_data(
                     file_name=self.export_duan_filename,
-                    dict_data={"start":duan.start, "end":duan.end, "direction":int(duan.direction), "height":float(duan.high-duan.low), "high":float(duan.high), "low":float(duan.low)},
+                    dict_data={"start": duan.start, "end": duan.end, "direction": int(duan.direction),
+                               "height": float(duan.high - duan.low), "high": float(duan.high), "low": float(duan.low)},
                     field_names=["start", "end", "direction", "height", "high", "low"]
                 )
                 self.pre_duan_start = duan.start
@@ -5795,9 +5827,9 @@ class CtaLineBar(object):
 
         # 检查是否具有两个连续得笔中枢
         zs_list = [zs for zs in self.bi_zs_list[-5:] if zs.end > self.duan_list[-2].start]
-        if len(zs_list) <2:
+        if len(zs_list) < 2:
             return False
-        pre_zs,cur_zs = zs_list[-2:]
+        pre_zs, cur_zs = zs_list[-2:]
         if direction == 1 and pre_zs.high > cur_zs.low:
             return False
         if direction == -1 and pre_zs.low < cur_zs.high:
@@ -6230,7 +6262,11 @@ class CtaLineBar(object):
         sub_indicators: []， 附图指标
         start_time: '', 开始时间
         end_time: ''，结束时间
-        data_list: list of dict
+        data_list: list of dict,{"datetime":K线开始时间, "open":开仓价, "close":收盘价, ,,, "ma20"：主图指标等值，，，"RSI": 副图指标等值,,,}
+        duan_list: 缠论线段 list of dict: {"start":开始时间字符串,"end":结束时间字符串,direction:1上涨/-1下跌,height高度,high高点,low低点}
+        bi_list: 缠论分笔 list of dict:{"start":开始时间字符串,"end":结束时间字符串,direction,height,high,low}
+        bi_zs_list: 缠论笔中枢 list of dict:{"start":开始时间字符串,"end":结束时间字符串,direction,height,high,low}
+        duan_zs_list 缠论段中枢 list of dict:{"start":开始时间字符串,"end":结束时间字符串,direction,height,high,low}
         }
 
         """
@@ -6593,6 +6629,30 @@ class CtaLineBar(object):
             else:
                 sub_indicators.append({'name': k, 'type': v.get('type')})
 
+        # 增加缠论线段 [ {start,end,direction,height,high,low}]
+        duan_list = []
+        if self.para_active_chanlun and self.duan_list:
+            duan_list = [{'start': d.start, 'end': d.end, 'direction': int(d.direction), 'height': float(d.height),
+                          'high': float(d.high), 'low': float(d.low)} for d in self.duan_list]
+
+        # 增加缠论分笔 [ {start,end,direction,height,high,low}]
+        bi_list = []
+        if self.para_active_chanlun and self.bi_list:
+            bi_list = [{'start': b.start, 'end': b.end, 'direction': int(b.direction), 'height': float(b.height),
+                        'high': float(b.high), 'low': float(b.low)} for b in self.bi_list]
+
+        # 增加缠论笔中枢 [ {start,end,direction,height,high,low}]
+        bi_zs_list = []
+        if self.para_active_chanlun and self.bi_zs_list:
+            bi_zs_list = [{'start': z.start, 'end': z.end, 'direction': int(z.direction), 'height': float(z.height),
+                           'high': float(z.high), 'low': float(z.low)} for z in self.bi_zs_list]
+
+        # 增加缠论段中枢 [ {start,end,direction,height,high,low}]
+        duan_zs_list = []
+        if self.para_active_chanlun and self.duan_zs_list:
+            duan_zs_list = [{'start': z.start, 'end': z.end, 'direction': int(z.direction), 'height': float(z.height),
+                             'high': float(z.high), 'low': float(z.low)} for z in self.duan_zs_list]
+
         return {
             'name': self.name,
             'type': self.interval,
@@ -6602,7 +6662,11 @@ class CtaLineBar(object):
             'sub_indicators': list(sorted(sub_indicators, key=lambda x: x['name'])),
             'start_time': bar_list[0].get('datetime'),
             'end_time': bar_list[-1].get('datetime'),
-            'data_list': bar_list}
+            'data_list': bar_list,
+            'duan_list': duan_list,
+            'bi_list': bi_list,
+            'bi_zs_list': bi_zs_list,
+            'duan_zs_list': duan_zs_list}
 
 
 class CtaMinuteBar(CtaLineBar):
