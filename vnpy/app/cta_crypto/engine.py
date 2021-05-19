@@ -204,11 +204,13 @@ class CtaEngine(BaseEngine):
     def process_timer_event(self, event: Event):
         """ 处理定时器事件"""
         all_trading = True
+        untrading_strategies = []
         # 触发每个策略的定时接口
         for strategy in list(self.strategies.values()):
             strategy.on_timer()
             if not strategy.trading:
                 all_trading = False
+                untrading_strategies.append(strategy.strategy_name)
 
         dt = datetime.now()
 
@@ -225,6 +227,12 @@ class CtaEngine(BaseEngine):
 
                 # 推送到事件
                 self.put_all_strategy_pos_event(all_strategy_pos)
+            else:
+                if len(untrading_strategies) > 0:
+                    account_id = self.engine_config.get('accountid', '-')
+                    msg = f'异常,{account_id}/策略{untrading_strategies}处于停止交易状态，不能推送持仓对比'
+                    self.write_error(msg)
+                    self.send_wechat(msg)
 
     def process_tick_event(self, event: Event):
         """处理tick到达事件"""
@@ -1002,6 +1010,7 @@ class CtaEngine(BaseEngine):
         """
         Init a strategy.
         """
+        self.write_log(f'创建独立线程执行{strategy_name} on_init()')
         task = self.thread_executor.submit(self._init_strategy, strategy_name, auto_start)
         self.thread_tasks.append(task)
         return True
@@ -1011,13 +1020,12 @@ class CtaEngine(BaseEngine):
         Init strategies in queue.
         """
         try:
+            self.write_log(f"{strategy_name} => 开始执行初始化")
             strategy = self.strategies[strategy_name]
 
             if strategy.inited:
                 self.write_error(f"{strategy_name} => 已经完成初始化，禁止重复操作")
                 return
-
-            self.write_log(f"{strategy_name} => 开始执行初始化")
 
             # Call on_init function of strategy
             self.call_strategy_func(strategy, strategy.on_init)
@@ -1048,7 +1056,7 @@ class CtaEngine(BaseEngine):
 
         except Exception as ex:
             msg = f'{strategy_name} => 执行on_init异常:{str(ex)}'
-            self.write_error(ex)
+            self.write_error(msg)
             self.send_wechat(msg)
             self.write_error(traceback.format_exc())
 
@@ -1077,7 +1085,7 @@ class CtaEngine(BaseEngine):
 
         except Exception as ex:
             msg = f'{strategy_name} => 执行on_start异常:{str(ex)}'
-            self.write_error(ex)
+            self.write_error(msg)
             self.send_wechat(msg)
             self.write_error(traceback.format_exc())
 
@@ -1112,7 +1120,7 @@ class CtaEngine(BaseEngine):
             return True, f'{strategy_name}=> 成功停止'
         except Exception as ex:
             msg = f'{strategy_name} => 执行stop_strategy()异常:{str(ex)}'
-            self.write_error(ex)
+            self.write_error(msg)
             self.send_wechat(msg)
             self.write_error(traceback.format_exc())
             return False, f'停止策略失败{strategy_name},异常:{str(ex)}'
@@ -1170,7 +1178,7 @@ class CtaEngine(BaseEngine):
 
         except Exception as ex:
             msg = f'执行remove_strategy({strategy_name})异常:{str(ex)}'
-            self.write_error(ex)
+            self.write_error(msg)
             self.send_wechat(msg)
             self.write_error(traceback.format_exc())
             return False, f'移除策略失败{strategy_name},异常:{str(ex)}'
@@ -1243,7 +1251,7 @@ class CtaEngine(BaseEngine):
             return True, msg
         except Exception as ex:
             msg = f'执行reload_strategy({strategy_name})异常:{str(ex)}'
-            self.write_error(ex)
+            self.write_error(msg)
             self.send_wechat(msg)
             self.write_error(traceback.format_exc())
             return False, f'重启策略失败{strategy_name},异常:{str(ex)}'
@@ -1281,7 +1289,9 @@ class CtaEngine(BaseEngine):
             # 保存策略数据
             strategy.sync_data()
         except Exception as ex:
-            self.write_error(u'保存策略{}数据异常:'.format(strategy_name, str(ex)))
+            msg = u'保存策略{}数据异常:'.format(strategy_name, str(ex))
+            self.write_error(msg)
+            self.send_wechat(msg)
             self.write_error(traceback.format_exc())
 
     def clean_strategy_cache(self, strategy_name):

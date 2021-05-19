@@ -376,13 +376,17 @@ class CtpGateway(BaseGateway):
     def check_status(self):
         """检查状态"""
 
+        # 检查交易接口、行情接口的连接状态
         if self.td_api.connect_status and self.md_api.connect_status:
             self.status.update({'con': True})
 
+        # 检查通达信行情接口（直接连通达信）
         if self.tdx_api:
             self.tdx_api.check_status()
-        if self.tdx_api is None or self.md_api is None:
-            return False
+
+        # 检查天勤行情接口
+        if self.tq_api:
+            self.tq_api.check_status()
 
         if not self.td_api.connect_status or self.md_api.connect_status:
             return False
@@ -1600,6 +1604,10 @@ class TdxMdApi():
         self.check_status()
 
     def check_status(self):
+        """
+        检查通达信直连状态
+        :return:
+        """
         # self.write_log(u'检查tdx接口状态')
         if len(self.registered_symbol_set) == 0:
             return
@@ -1826,6 +1834,8 @@ class SubMdApi():
         self.symbol_tick_dict = {}  # 合约与最后一个Tick得字典
         self.registed_symbol_set = set()  # 订阅的合约记录集
 
+        self.last_tick_dt = None
+
         self.sub = None
         self.setting = {}
         self.connect_status = False
@@ -1852,6 +1862,42 @@ class SubMdApi():
             self.gateway.write_error(traceback.format_exc())
             self.connect_status = False
 
+    def check_status(self):
+        """接口状态的健康检查"""
+
+        # 订阅的合约
+        d = {'sub_symbols': sorted(self.symbol_tick_dict.keys())}
+
+        # 合约的最后时间
+        if self.last_tick_dt:
+            d.update({"sub_tick_time": self.last_tick_dt.strftime('%Y-%m-%d %H:%M:%S')})
+
+        if len(self.symbol_tick_dict) > 0:
+            dt_now = datetime.now()
+            hh_mm = dt_now.hour * 100 + dt_now.minute
+            # 期货交易时间内
+            if 900 <= hh_mm <= 1130 or 1300 <= hh_mm <= 1500 or hh_mm < 230 or hh_mm >= 2100:
+                # 未有数据到达
+                if self.last_tick_dt is None:
+                    d.update({"sub_status": False, "sub_error": u"rabbitmq未有行情数据到达"})
+                else: # 有数据
+
+                    # 超时15分钟以上
+                    if (dt_now - self.last_tick_dt).total_seconds() > 60 * 15:
+                        d.update({"sub_status": False,
+                                  "sub_error": u"{}rabbitmq行情数据超时15分钟以上".format(hh_mm)})
+                    else:
+                        d.update({"sub_status": True})
+                        self.gateway.status.pop("sub_error", None)
+
+            # 非交易时间
+            else:
+                self.gateway.status.pop("sub_status", None)
+                self.gateway.status.pop("sub_error", None)
+
+        # 更新到gateway的状态中去
+        self.gateway.status.update(d)
+
     def on_message(self, chan, method_frame, _header_frame, body, userdata=None):
         # print(" [x] %r" % body)
         try:
@@ -1874,6 +1920,7 @@ class SubMdApi():
                             exchange=Exchange(d.get('exchange')),
                             symbol=symbol,
                             datetime=dt)
+
             d.pop('exchange', None)
             d.pop('symbol', None)
             tick.__dict__.update(d)
@@ -1886,6 +1933,8 @@ class SubMdApi():
             if pre_tick:
                 if tick.last_price > pre_tick.last_price * 1.2 or tick.last_price < pre_tick.last_price * 0.8:
                     return
+
+            self.last_tick_dt = tick.datetime
 
             self.gateway.on_tick(tick)
             self.gateway.on_custom_tick(tick)
@@ -2015,6 +2064,11 @@ class TqMdApi():
             self.gateway.write_log(f'天勤行情API已连接')
             self.update_thread = Thread(target=self.update)
             self.update_thread.start()
+
+    def check_status(self):
+        """检查接口状态"""
+
+        pass
 
     def generate_tick_from_quote(self, vt_symbol, quote) -> TickData:
         """

@@ -1,5 +1,6 @@
 import traceback
 import json
+from copy import deepcopy
 from uuid import uuid1
 from datetime import datetime, timedelta
 from threading import Thread
@@ -84,6 +85,16 @@ class StockRpcGateway(BaseGateway):
 
         self.query_all()
 
+    def check_status(self):
+
+        if self.client:
+            pass
+
+        if self.rabbit_api:
+            self.rabbit_api.check_status()
+
+        return True
+
     def subscribe(self, req: SubscribeRequest):
         """行情订阅"""
         self.write_log(f'创建订阅任务=> rabbitMQ')
@@ -114,6 +125,8 @@ class StockRpcGateway(BaseGateway):
         task.close()
         # gateway_name = self.symbol_gateway_map.get(req.vt_symbol, "")
         # self.client.subscribe(req, gateway_name)
+        if self.rabbit_api:
+            self.rabbit_api.registed_symbol_set.add(req.vt_symbol)
 
     def send_order(self, req: OrderRequest):
         """
@@ -161,7 +174,8 @@ class StockRpcGateway(BaseGateway):
         for position in positions:
             position.gateway_name = self.gateway_name
             # 更换 vt_positionid得gateway前缀
-            position.vt_positionid = position.vt_positionid.replace(f'{position.gateway_name}.', f'{self.gateway_name}.')
+            position.vt_positionid = position.vt_positionid.replace(f'{position.gateway_name}.',
+                                                                    f'{self.gateway_name}.')
             # 更换 vt_accountid得gateway前缀
             position.vt_accountid = position.vt_accountid.replace(f'{position.gateway_name}.', f'{self.gateway_name}.')
 
@@ -205,6 +219,8 @@ class StockRpcGateway(BaseGateway):
         if event.type == EVENT_TICK:
             return
 
+        event = deepcopy(event)
+
         data = event.data
 
         if hasattr(data, "gateway_name"):
@@ -225,7 +241,7 @@ class StockRpcGateway(BaseGateway):
             if hasattr(data, 'vt_positionid'):
                 data.vt_positionid = data.vt_positionid.replace(f'{self.remote_gw_name}.', f'{self.gateway_name}.')
 
-            if event.type in [EVENT_ORDER,EVENT_TRADE]:
+            if event.type in [EVENT_ORDER, EVENT_TRADE]:
                 self.write_log(f'{self.remote_gw_name} => {self.gateway_name} event:{data.__dict__}')
 
         self.event_engine.put(event)
@@ -242,11 +258,47 @@ class SubMdApi():
 
         self.symbol_tick_dict = {}  # 合约与最后一个Tick得字典
         self.registed_symbol_set = set()  # 订阅的合约记录集
-
+        self.last_tick_dt = None
         self.sub = None
         self.setting = {}
         self.connect_status = False
         self.thread = None  # 用线程运行所有行情接收
+
+    def check_status(self):
+        """接口状态的健康检查"""
+
+        # 订阅的合约
+        d = {'sub_symbols': sorted(self.symbol_tick_dict.keys())}
+
+        # 合约的最后时间
+        if self.last_tick_dt:
+            d.update({"sub_tick_time": self.last_tick_dt.strftime('%Y-%m-%d %H:%M:%S')})
+
+        if len(self.symbol_tick_dict) > 0:
+            dt_now = datetime.now()
+            hh_mm = dt_now.hour * 100 + dt_now.minute
+            # 期货交易时间内
+            if 930 <= hh_mm <= 1130 or 1301 <= hh_mm <= 1500:
+                # 未有数据到达
+                if self.last_tick_dt is None:
+                    d.update({"sub_status": False, "sub_error": u"rabbitmq未有行情数据到达"})
+                else: # 有数据
+
+                    # 超时5分钟以上
+                    if (dt_now - self.last_tick_dt).total_seconds() > 60 * 5:
+                        d.update({"sub_status": False,
+                                  "sub_error": u"{}rabbitmq行情数据超时5分钟以上".format(hh_mm)})
+                    else:
+                        d.update({"sub_status": True})
+                        self.gateway.status.pop("sub_error", None)
+
+            # 非交易时间
+            else:
+                self.gateway.status.pop("sub_status", None)
+                self.gateway.status.pop("sub_error", None)
+
+        # 更新到gateway的状态中去
+        self.gateway.status.update(d)
 
     def connect(self, setting={}):
         """连接"""
@@ -295,6 +347,7 @@ class SubMdApi():
 
             self.symbol_tick_dict[symbol] = tick
             self.gateway.on_tick(tick)
+            self.last_tick_dt = tick.datetime
 
         except Exception as ex:
             self.gateway.write_error(u'RabbitMQ on_message 异常:{}'.format(str(ex)))

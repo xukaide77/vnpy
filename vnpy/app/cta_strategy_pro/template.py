@@ -1251,7 +1251,7 @@ class CtaProFutureTemplate(CtaProTemplate):
         dist_record['symbol'] = trade.vt_symbol
 
         # 处理股指锁单
-        if trade.exchange == Exchange.CFFEX:
+        if trade.exchange == Exchange.CFFEX and not self.backtesting:
             if trade.direction == Direction.LONG:
                 if abs(self.position.short_pos) >= trade.volume:
                     self.position.short_pos += trade.volume

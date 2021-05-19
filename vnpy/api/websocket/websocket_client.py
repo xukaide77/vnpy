@@ -212,7 +212,7 @@ class WebsocketClient:
                                 recv_data = gzip.decompress(recv_data)
                             data = self.unpack_data(recv_data)
                         except ValueError as e:
-                            print("websocket unable to parse data: " + recv_data)
+                            print("websocket unable to parse data: " + recv_data, file=sys.stderr)
                             raise e
 
                         self._log('recv data: %s', data)

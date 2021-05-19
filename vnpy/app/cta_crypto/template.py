@@ -513,6 +513,7 @@ class CtaFutureTemplate(CtaTemplate):
             self.write_log(u'保存policy数据')
             self.policy.save()
 
+
     def save_klines_to_cache(self, kline_names: list = []):
         """
         保存K线数据到缓存
@@ -600,9 +601,10 @@ class CtaFutureTemplate(CtaTemplate):
             return {}
 
     def init_policy(self):
-        self.write_log(u'init_policy(),初始化执行逻辑')
+        self.write_log(f'{self.strategy_name} => init_policy(),初始化执行逻辑')
         if self.policy:
             self.policy.load()
+            self.write_log(f'{self.strategy_name} => init_policy(),初始化执行逻辑完成')
 
     def init_position(self):
         """

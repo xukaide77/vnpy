@@ -209,6 +209,12 @@ class BaseGateway(ABC):
         self.write_log(msg, level=ERROR, on_log=True)
         print(msg, file=sys.stderr)
 
+    def check_status(self) -> bool:
+        """
+        check gateway connection or market data status.
+        """
+        return False
+
     @abstractmethod
     def connect(self, setting: dict) -> None:
         """
