@@ -101,6 +101,7 @@ class PortfolioTestingEngine(BackTestingEngine):
             # 加载csv文件 =》 dateframe
             symbol_df = pd.read_csv(bar_file, dtype=data_types)
             if len(symbol_df)==0:
+                print(f'回测时加载{vt_symbol} csv文件{bar_file}失败。', file=sys.stderr)
                 self.write_error(f'回测时加载{vt_symbol} csv文件{bar_file}失败。')
                 return False
 
@@ -133,7 +134,8 @@ class PortfolioTestingEngine(BackTestingEngine):
         """
         self.output('comine_df')
         if len(self.bar_df_dict) == 0:
-            self.output(f'无加载任何数据,请检查bar文件路径配置')
+            print(f'{self.test_name}:无加载任何数据,请检查bar文件路径配置',file=sys.stderr)
+            self.output(f'{self.test_name}:无加载任何数据,请检查bar文件路径配置')
 
         self.bar_df = pd.concat(self.bar_df_dict, axis=0).swaplevel(0, 1).sort_index()
         self.bar_df_dict.clear()
