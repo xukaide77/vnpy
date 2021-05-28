@@ -86,7 +86,6 @@ STOP_STATUS_MAP = {
     Status.REJECTED: StopOrderStatus.CANCELLED
 }
 
-
 class CtaEngine(BaseEngine):
     """
     策略引擎【数字货币版】
@@ -216,6 +215,8 @@ class CtaEngine(BaseEngine):
 
         if self.last_minute != dt.minute:
             self.last_minute = dt.minute
+            # 检查未订阅得合约
+            self.check_unsubscribed_symbols()
 
             if all_trading:
                 # 主动获取所有策略得持仓信息
@@ -960,6 +961,7 @@ class CtaEngine(BaseEngine):
         Add a new strategy.
         """
         try:
+            self.write_log(f'{strategy_name} => 开始添加实例:{setting}')
             if strategy_name in self.strategies:
                 msg = f"{strategy_name} => 创建策略失败，存在重名"
                 self.write_log(msg=msg,
@@ -1006,14 +1008,30 @@ class CtaEngine(BaseEngine):
             self.write_error(traceback.format_exc())
             return False, msg
 
+
+
     def init_strategy(self, strategy_name: str, auto_start: bool = False):
         """
         Init a strategy.
         """
         self.write_log(f'创建独立线程执行{strategy_name} on_init()')
         task = self.thread_executor.submit(self._init_strategy, strategy_name, auto_start)
+        # 添加执行完毕得回调函数
+        task.add_done_callback(self.thread_pool_callback)
         self.thread_tasks.append(task)
         return True
+
+    def thread_pool_callback(self, worker):
+        """线程异常捕捉"""
+        worker_exception = worker.exception()
+        if worker_exception:
+            account_id = self.engine_config.get('accountid','cta_crypto')
+            msg = f'{account_id}worker_exception :{str(worker_exception)}'
+            self.write_error(msg)
+            self.send_wechat(msg)
+
+        else:
+            self.write_log(f'crypto engine thread worker completed')
 
     def _init_strategy(self, strategy_name: str, auto_start: bool = False):
         """
@@ -1147,9 +1165,14 @@ class CtaEngine(BaseEngine):
 
             strategy = self.strategies[strategy_name]
             if strategy.trading:
-                err_msg = f"策略{strategy.strategy_name}移除失败，请先停止"
-                self.write_error(err_msg)
-                return False, err_msg
+                # err_msg = f"策略{strategy.strategy_name}正在运行，先停止"
+                # self.write_error(err_msg)
+                # return False, err_msg
+                ret, msg = self.stop_strategy(strategy_name)
+                if not ret:
+                    return False, msg
+                else:
+                    self.write_log(msg)
 
             # Remove setting
             self.remove_strategy_setting(strategy_name)
@@ -1648,11 +1671,13 @@ class CtaEngine(BaseEngine):
         # 账号的持仓处理 => compare_pos
         compare_pos = dict()  # vt_symbol: {'账号多单': xx, '账号空单':xxx, '策略空单':[], '策略多单':[]}
 
-        for position in list(self.positions.values()):
+        self.write_log(f'扫描帐号持仓')
+        positions = self.main_engine.get_all_positions()
+        for position in positions:  # list(self.positions.values()):
             # gateway_name.symbol.exchange => symbol.exchange
             vt_symbol = position.vt_symbol
             vt_symbols.add(vt_symbol)
-
+            self.write_log(f'帐号:{position.vt_symbol}:{position.volume}')
             compare_pos[vt_symbol] = OrderedDict(
                 {
                     "账号净仓": position.volume,
@@ -1664,6 +1689,7 @@ class CtaEngine(BaseEngine):
             )
 
         # 逐一根据策略仓位，与Account_pos进行处理比对
+        self.write_log(f'扫描策略持仓')
         for strategy_pos in strategy_pos_list:
             for pos in strategy_pos.get('pos', []):
                 vt_symbol = pos.get('vt_symbol')
@@ -1694,20 +1720,22 @@ class CtaEngine(BaseEngine):
                         u'{}({})'.format(strategy_pos['strategy_name'], abs(pos.get('volume', 0))))
                     self.write_log(u'更新{}策略持多仓=>{}'.format(vt_symbol, symbol_pos.get('策略多单', 0)))
 
+                compare_pos.update({vt_symbol: symbol_pos})
+
         pos_compare_result = ''
         # 精简输出
         compare_info = ''
 
         for vt_symbol in sorted(vt_symbols):
             # 发送不一致得结果
-            symbol_pos = compare_pos.pop(vt_symbol, None)
-            if not symbol_pos:
-                self.write_error(f'持仓对比中，找不到{vt_symbol}')
-                continue
-            net_symbol_pos = round(round(symbol_pos['策略多单'], 7) - round(symbol_pos['策略空单'], 7), 7)
+            symbol_pos = compare_pos.pop(vt_symbol, {})
+            # if not symbol_pos:
+            #     self.write_error(f'持仓对比中，找不到{vt_symbol}')
+            #     continue
+            net_symbol_pos = round(round(symbol_pos.get('策略多单',0), 7) - round(symbol_pos.get('策略空单',0), 7), 7)
 
             # 多空都一致
-            if round(symbol_pos['账号净仓'], 7) == net_symbol_pos:
+            if round(symbol_pos.get('账号净仓',0), 7) == net_symbol_pos:
                 msg = u'{}多空都一致.{}\n'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False))
                 self.write_log(msg)
                 compare_info += msg
@@ -1716,7 +1744,7 @@ class CtaEngine(BaseEngine):
                 self.write_error(u'{}不一致:{}'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False)))
                 compare_info += u'{}不一致:{}\n'.format(vt_symbol, json.dumps(symbol_pos, indent=2, ensure_ascii=False))
 
-                diff_volume = round(symbol_pos['账号净仓'], 7) - net_symbol_pos
+                diff_volume = round(symbol_pos.get('账号净仓',0), 7) - net_symbol_pos
                 # 账号仓位> 策略仓位, sell
                 if diff_volume > 0 and auto_balance:
                     contract = self.main_engine.get_contract(vt_symbol)

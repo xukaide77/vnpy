@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 from vnpy.trader.app import BaseApp
-from .engine import IndexTickPublisher, APP_NAME
+from .engine import IndexTickPublisher,IndexTickPublisherV2, APP_NAME
 
 
 class IndexTickPublisherApp(BaseApp):
@@ -12,4 +12,4 @@ class IndexTickPublisherApp(BaseApp):
     app_module = __module__
     app_path = Path(__file__).parent
     display_name = u'期货指数全行情推送'
-    engine_class = IndexTickPublisher
+    engine_class = IndexTickPublisherV2

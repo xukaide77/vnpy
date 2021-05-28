@@ -1127,9 +1127,14 @@ class CtaEngine(BaseEngine):
         """
         strategy = self.strategies[strategy_name]
         if strategy.trading:
-            err_msg = f"策略{strategy.strategy_name}移除失败，请先停止"
-            self.write_error(err_msg)
-            return False, err_msg
+            # err_msg = f"策略{strategy.strategy_name}正在运行，先停止"
+            #self.write_error(err_msg)
+            #return False, err_msg
+            ret , msg = self.stop_strategy(strategy_name)
+            if not ret:
+                return False, msg
+            else:
+                self.write_log(msg)
 
         # Remove setting
         self.remove_strategy_setting(strategy_name)

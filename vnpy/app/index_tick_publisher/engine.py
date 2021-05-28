@@ -11,22 +11,276 @@ from datetime import datetime, timedelta
 from time import sleep
 from logging import ERROR
 from pytdx.exhq import TdxExHq_API
+from copy import deepcopy
 
 from vnpy.event import EventEngine
 from vnpy.trader.constant import Exchange
 from vnpy.trader.engine import BaseEngine, MainEngine
 from vnpy.trader.event import EVENT_TIMER
-from vnpy.trader.object import TickData
-from vnpy.trader.utility import get_trading_date
-from vnpy.data.tdx.tdx_common import TDX_FUTURE_HOSTS
+from vnpy.trader.object import TickData, SubscribeRequest
+from vnpy.trader.utility import get_trading_date, get_underlying_symbol, load_json, get_real_symbol_by_exchange
+from vnpy.data.tdx.tdx_common import TDX_FUTURE_HOSTS, get_future_contracts
 from vnpy.component.base import (
     NIGHT_MARKET_23,
     NIGHT_MARKET_SQ2,
     MARKET_DAY_ONLY)
 
 from vnpy.amqp.producer import publisher
+from vnpy.gateway.ctp.ctp_gateway import CtpMdApi, symbol_exchange_map
 
 APP_NAME = 'Idx_Publisher'
+
+
+class IndexTickPublisherV2(BaseEngine):
+    """
+    指数tick发布服务
+    透过ctp 行情接口，获取所有合约，并根据合约的仓指，生成指数tick，发布至rabbitMQ
+    """
+
+    # ----------------------------------------------------------------------
+    def __init__(self, main_engine: MainEngine, event_engine: EventEngine):
+        """"""
+        super(IndexTickPublisherV2, self).__init__(
+            main_engine, event_engine, APP_NAME)
+
+        self.main_engine = main_engine
+        self.event_engine = event_engine
+        self.create_logger(logger_name=APP_NAME)
+        self.gateway_name = 'CTP'
+        self.last_minute = None
+
+        self.registerEvent()
+
+        self.connection_status = False  # 连接状态
+
+        #  ctp md api
+        self.subscribed_symbols = set()  # 已订阅合约代码
+
+        self.md_api = None  # API 的连接会话对象
+        self.last_tick_dt = {}  # 记录该会话对象的最后一个tick时间
+
+        self.instrument_count = 50000
+
+        self.has_qry_instrument = False
+
+        # vt_setting.json内rabbitmq配置项
+        self.conf = {}
+        self.pub = None
+
+        self.status = {}
+        self.subscribed_symbols = set()  # 已订阅合约代码
+        self.ticks = {}
+
+        # 本地/vnpy/data/tdx/future_contracts.json
+        self.all_contracts = get_future_contracts()
+        # 需要订阅的短合约
+        self.selected_underly_symbols = load_json('subscribe_symbols.json', auto_save=False)
+
+        # 短合约 <=> 所有真实合约 的数量
+        self.underly_symbols_num_dict = {}
+
+    def write_error(self, content: str):
+        self.write_log(msg=content, level=ERROR)
+
+    def create_publisher(self, conf):
+        """创建rabbitmq 消息发布器"""
+        if self.pub:
+            return
+        try:
+            self.write_log(f'创建发布器:{conf}')
+            # 消息发布
+            self.pub = publisher(host=conf.get('host', 'localhost'),
+                                 port=conf.get('port', 5672),
+                                 user=conf.get('user', 'admin'),
+                                 password=conf.get('password', 'admin'),
+                                 channel_number=conf.get('channel_number', 1),
+                                 queue_name=conf.get('queue_name', ''),
+                                 routing_key=conf.get('routing_key', 'default'),
+                                 exchange=conf.get('exchange', 'x_fanout_idx_tick'))
+            self.write_log(f'创建发布器成功')
+        except Exception as ex:
+            self.write_log(u'创建tick发布器异常:{}'.format(str(ex)))
+
+    # ----------------------------------------------------------------------
+    def registerEvent(self):
+        """注册事件监听"""
+        self.event_engine.register(EVENT_TIMER, self.process_timer_event)
+
+    def process_timer_event(self, event):
+        """定时执行"""
+        dt = datetime.now()
+
+        if self.last_minute and dt.minute == self.last_minute:
+            return
+
+        self.last_minute = dt.minute
+
+        self.check_status()
+
+    def check_status(self):
+        """定期检查状态"""
+        if not self.md_api:
+            self.status.update({'con': False})
+            self.write_log(f'行情接口未连接')
+            return
+        dt_now = datetime.now()
+
+        # 扫描合约配置文件
+        for underly_symbol, info in self.all_contracts.items():
+            # 如果本地subscribe_symbols内有合约的指定订阅清单，进行排除 ['RB','IF']
+            if len(self.selected_underly_symbols) > 0 and underly_symbol not in self.selected_underly_symbols:
+                continue
+
+            # 日盘数据，夜盘期间不订阅
+            if dt_now.hour < 4 or dt_now.hour > 20:
+                if underly_symbol in MARKET_DAY_ONLY:
+                    continue
+
+            # 获取当前所有的合约列表
+            symbols = info.get('symbols', {})
+            # 获取交易所
+            exchange = info.get('exchange', 'LOCAL')
+            # 获取本地记录的tick dict
+            tick_dict = self.ticks.get(underly_symbol, {})
+
+            for symbol in symbols.keys():
+                # 全路径合约 => 标准合约 ,如 ZC2109 => ZC109, RB2110 => rb2110
+                vn_symbol = get_real_symbol_by_exchange(symbol, Exchange(exchange))
+
+                if symbol.replace(underly_symbol, '') < dt_now.strftime('%Y%m%d'):
+                    self.write_log(f'移除早于当月的合约{symbol}')
+                    symbols.pop(symbol, None)
+                    continue
+                # 生成带交易所信息的合约
+                vt_symbol = f'{vn_symbol}.{exchange}'
+                # symbol_exchange_map是全局变量，ctp md api会使用到，所以需要更新其 合约与交易所的关系
+                if vn_symbol not in symbol_exchange_map:
+                    symbol_exchange_map.update({vn_symbol: Exchange(exchange)})
+
+                # 该合约没有在行情中，重新发出订阅
+                if vt_symbol not in tick_dict:
+                    req = SubscribeRequest(
+                        symbol=vn_symbol,
+                        exchange=Exchange(exchange)
+                    )
+                    self.subscribe(req)
+
+            # 等级短合约 <=> 真实合约数量
+            self.underly_symbols_num_dict.update({underly_symbol: len(symbols.keys())})
+
+    def connect(self, *args, **kwargs):
+        """
+        连接ctp行情，和rabbitmq推送
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        self.write_log(f'connect({kwargs}')
+
+        # 连接ctp行情服务器
+        md_address = kwargs.get('md_address')
+        userid = kwargs.get('userid')
+        password = kwargs.get('password')
+        brokerid = kwargs.get('brokerid')
+        if not self.md_api:
+            self.write_log(f'创建ctp行情服务器{md_address}')
+            self.md_api = CtpMdApi(gateway=self)
+        self.md_api.connect(address=md_address,
+                            userid=userid,
+                            password=password,
+                            brokerid=brokerid)
+
+        # 连接rabbit MQ
+        rabbit_config = kwargs.get('rabbit_config', {})
+        self.write_log(f'创建rabbitMQ 消息推送桩,{rabbit_config}')
+        self.conf.update(rabbit_config)
+        self.create_publisher(self.conf)
+
+    def subscribe(self, req: SubscribeRequest):
+        """订阅合约"""
+        self.write_log(f'engine:订阅合约: {req.vt_symbol}')
+
+        if req.vt_symbol not in self.subscribed_symbols:
+            self.subscribed_symbols.add(req.vt_symbol)
+
+        if self.md_api:
+            self.md_api.subscribe(req)
+
+    def on_tick(self, tick):
+        """ tick到达事件"""
+        short_symbol = get_underlying_symbol(tick.symbol).upper()
+        # 更新tick
+        tick_dict = self.ticks.get(short_symbol, None)
+        if tick_dict is None:
+            tick_dict = {tick.symbol: tick}
+            self.ticks.update({short_symbol: tick_dict})
+            return
+
+        # 与最后
+        last_dt = self.last_tick_dt.get(short_symbol, tick.datetime)
+
+        # 进行指数合成
+        if last_dt and tick.datetime.second != last_dt.second:
+            all_amount = 0
+            all_interest = 0
+            all_volume = 0
+            all_ask1 = 0
+            all_bid1 = 0
+            last_price = 0
+            ask_price_1 = 0
+            bid_price_1 = 0
+            mi_tick = None
+
+            # 已经积累的行情tick数量，不足总数减1，不处理
+            n = self.underly_symbols_num_dict.get(short_symbol, 1)
+            if len(tick_dict) < min(n*0.8, 3) :
+                self.write_log(f'{short_symbol}合约数据{len(tick_dict)}不足{n} 0.8,暂不合成指数')
+                return
+
+            # 计算所有合约的累加持仓量、资金、成交量、找出最大持仓量的主力合约
+            for t in tick_dict.values():
+                all_interest += t.open_interest
+                all_amount += t.last_price * t.open_interest
+                all_volume += t.volume
+                all_ask1 += t.ask_price_1 * t.open_interest
+                all_bid1 += t.bid_price_1 * t.open_interest
+                if mi_tick is None or mi_tick.open_interest < t.open_interest:
+                    mi_tick = t
+
+            # 总量 > 0
+            if all_interest > 0 and all_amount > 0:
+                last_price = round(float(all_amount / all_interest), 4)
+            # 卖1价
+            if all_ask1 > 0 and all_interest > 0:
+                ask_price_1 = round(float(all_ask1 / all_interest), 4)
+            # 买1价
+            if all_bid1 > 0 and all_interest > 0:
+                bid_price_1 = round(float(all_bid1 / all_interest), 4)
+
+            if mi_tick and last_price > 0:
+                if self.pub:
+                    d = copy.copy(mi_tick.__dict__)
+                    # 时间 =》 字符串
+                    if isinstance(mi_tick.datetime, datetime):
+                        d.update({'datetime': mi_tick.datetime.strftime('%Y-%m-%d %H:%M:%S.%f')})
+                    # 变量 => 字符串
+                    d.update({'exchange': mi_tick.exchange.value})
+                    d.update({'symbol': f'{short_symbol}99', 'vt_symbol': f'{short_symbol}99.{mi_tick.exchange.value}'})
+                    # 更新未指数的持仓量、交易量，最后价格，ask1，bid1
+                    d.update({'open_interest': all_interest, 'volume': all_volume,
+                              'last_price': last_price, 'ask_price_1': ask_price_1, 'bid_price_1': bid_price_1})
+                    print('{} {}:{}'.format(d.get('datetime'), d.get("vt_symbol"), d.get('last_price')))
+                    d = json.dumps(d)
+                    self.pub.pub(d)
+
+        # 更新时间
+        self.last_tick_dt.update({short_symbol: tick.datetime})
+
+        tick_dict.update({tick.symbol: tick})
+        self.ticks.update({short_symbol: tick_dict})
+
+    def on_custom_tick(self, tick):
+        pass
 
 
 class IndexTickPublisher(BaseEngine):
@@ -276,7 +530,14 @@ class IndexTickPublisher(BaseEngine):
             self.pub.exit()
 
     def check_status(self):
-        # self.write_log(u'检查tdx接口状态')
+        self.write_log(u'检查tdx接口状态')
+        if len(self.symbol_tick_dict) > 0:
+            k = self.symbol_tick_dict.keys()[0]
+            tick = self.symbol_tick_dict.get(k, None)
+            if tick:
+                self.write_log(f'{tick.vt_symbol}: {tick.datetime}, price:{tick.last_price}')
+        else:
+            self.write_log(f'目前没有收到tick')
 
         # 若还没有启动连接，就启动连接
         over_time = self.last_tick_dt is None or (datetime.now() - self.last_tick_dt).total_seconds() > 60
@@ -285,8 +546,8 @@ class IndexTickPublisher(BaseEngine):
             self.close()
             self.api = None
             self.reconnect()
-
-        # self.write_log(u'tdx接口状态正常')
+        else:
+            self.write_log(u'tdx接口状态正常')
 
     def qry_instrument(self):
         """
