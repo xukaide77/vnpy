@@ -851,7 +851,7 @@ class CtaProTemplate(CtaTemplate):
         #if not self.backtesting:
         if len(self.vt_symbol) > 0 and self.vt_symbol not in pos_symbols:
             pos_symbols.add(self.vt_symbol)
-        if len(self.idx_symbol) > 0 and self.idx_symbol not in pos_symbols:
+        if self.idx_symbol and self.idx_symbol not in pos_symbols:
             pos_symbols.add(self.idx_symbol)
         # 如果持仓的合约，不在self.vt_symbol中，需要订阅
         for symbol in list(pos_symbols):
@@ -888,6 +888,21 @@ class CtaProTemplate(CtaTemplate):
         if self.cur_datetime and (datetime.now() - self.cur_datetime).total_seconds() < 10:
             self.write_log(u'当前持仓:{}'.format(pos_list))
         return pos_list
+
+    def get_policy_json(self):
+        """获取policy的json格式数据"""
+        if not self.policy:
+            return None
+
+        data = self.policy.to_json()
+        return data
+
+    def get_grid_trade_json(self):
+        """获取gt组件的json格式数据"""
+        if not self.gt:
+            return None
+        data = self.gt.to_json()
+        return data
 
     def tns_cancel_logic(self, dt, force=False):
         "撤单逻辑"""

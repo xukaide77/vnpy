@@ -2343,7 +2343,7 @@ class BackTestingEngine(object):
             'task_start_time': datetime.now(),  # 任务开始执行时间
             'run_host': socket.gethostname(),  # 任务运行得host主机
             'test_setting': self.test_setting,  # 回测参数
-            'strategy_setting': self.strategy_setting,  # 策略参数
+            'strategy_setting': binary.Binary(zlib.compress(pickle.dumps(self.strategy_setting)))  # 策略参数(二进制保存）
         }
         # 去除包含"."的域
         if 'symbol_datas' in d['test_setting'].keys():
@@ -2409,7 +2409,8 @@ class BackTestingEngine(object):
             d.update({'task_finish_time': datetime.now()})  # 更新回测完成时间
             d.update({'trade_list': binary.Binary(zlib.compress(pickle.dumps(self.trade_pnl_list)))})  # 更新交易记录
             d.update({'daily_list': binary.Binary(zlib.compress(pickle.dumps(self.daily_list)))})  # 更新每日净值记录
-
+            strategy_json_datas = self.get_all_strategy_json_data()
+            d.update({'strategy_json_datas': binary.Binary(zlib.compress(pickle.dumps(strategy_json_datas)))})
             self.write_log(u'更新回测结果至数据库')
 
             self.mongo_api.db_update(
@@ -2418,6 +2419,28 @@ class BackTestingEngine(object):
                 filter_dict=flt,
                 data_dict=d,
                 replace=False)
+
+    def get_all_strategy_json_data(self):
+        """获取所有策略得json数据"""
+        data = {}
+
+        for strategy_name, strategy in self.strategies.items():
+            try:
+                strategy_data = {}
+                if hasattr(strategy, 'get_policy_json'):
+                    policy_json = strategy.get_policy_json()
+                    if policy_json:
+                        strategy_data['Policy'] = policy_json
+                if hasattr(strategy, 'get_grid_trade_json'):
+                    grid_trade_json = strategy.get_grid_trade_json()
+                    if grid_trade_json:
+                        strategy_data['Grids'] = grid_trade_json
+                if strategy_data:
+                    data[strategy_name] = strategy_data
+            except Exception as ex:
+                self.write_error(msg=f'获取策略{strategy_name}得json数据异常.{str(ex)}')
+
+        return data
 
     def put_strategy_event(self, strategy: CtaTemplate):
         """发送策略更新事件，回测中忽略"""

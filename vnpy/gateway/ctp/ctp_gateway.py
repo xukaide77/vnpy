@@ -494,7 +494,7 @@ class CtpGateway(BaseGateway):
                         self.l2_md_api.subscribe(req)
 
                     else:
-                        self.write_log(f'使用CTP接口订阅{req.symbol}')
+                        #self.write_log(f'使用CTP接口订阅{req.symbol}')
                         self.md_api.subscribe(req)
 
             # Allow the strategies to start before the connection
@@ -822,7 +822,8 @@ class CtpMdApi(MdApi):
         """
         Subscribe to tick data update.
         """
-        self.gateway.write_log(f'{self.name}订阅:{req.exchange} {req.symbol}')
+        if req.symbol not in self.subscribed:
+            self.gateway.write_log(f'{self.name}订阅:{req.exchange} {req.symbol}')
         if self.login_status:
             self.subscribeMarketData(req.symbol)
         self.subscribed.add(req.symbol)
