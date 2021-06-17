@@ -4,8 +4,9 @@
 import sys
 from abc import ABC, abstractmethod
 from typing import Any, Sequence, Dict, List, Optional, Callable
-from copy import copy
+from copy import copy,deepcopy
 from logging import INFO, DEBUG, ERROR
+from datetime import datetime
 
 from vnpy.event import Event, EventEngine
 from .event import (
@@ -34,7 +35,7 @@ from .object import (
     Exchange
 )
 
-from vnpy.trader.utility import get_folder_path, round_to
+from vnpy.trader.utility import get_folder_path, round_to, get_underlying_symbol, get_real_symbol_by_exchange
 from vnpy.trader.util_logger import setup_logger
 
 
@@ -208,6 +209,12 @@ class BaseGateway(ABC):
             msg = f"{msg}，代码：{error_id}，信息：{error_msg}"
         self.write_log(msg, level=ERROR, on_log=True)
         print(msg, file=sys.stderr)
+
+    def check_status(self) -> bool:
+        """
+        check gateway connection or market data status.
+        """
+        return False
 
     @abstractmethod
     def connect(self, setting: dict) -> None:
@@ -554,6 +561,113 @@ class TickCombiner(object):
             ratio_tick.low_price = self.spread_low
 
             self.gateway.on_tick(ratio_tick)
+
+class IndexGenerator:
+    """
+    指数生成器
+    """
+
+    def __init__(self, gateway, setting):
+        self.gateway = gateway
+        self.gateway_name = self.gateway.gateway_name
+        self.gateway.write_log(u'创建指数合成类:{}'.format(setting))
+
+        self.ticks = {}  # 所有真实合约, symbol: tick
+        self.last_dt = None  # 最后tick得时间
+        self.underlying_symbol = setting.get('underlying_symbol')
+        self.exchange = setting.get('exchange', None)
+        self.price_tick = setting.get('price_tick')
+        self.symbols = setting.get('symbols', {})
+        # 订阅行情
+        self.subscribe()
+
+        self.n = len(self.symbols)
+
+    def subscribe(self):
+        """订阅行情"""
+        dt_now = datetime.now()
+        for symbol in list(self.symbols.keys()):
+            pre_open_interest = self.symbols.get(symbol,0)
+            # 全路径合约 => 标准合约 ,如 ZC2109 => ZC109, RB2110 => rb2110
+            vn_symbol = get_real_symbol_by_exchange(symbol, Exchange(self.exchange))
+            # 先移除
+            self.symbols.pop(symbol, None)
+            if symbol.replace(self.underlying_symbol, '') < dt_now.strftime('%Y%m%d'):
+                self.gateway.write_log(f'移除早于当月的合约{symbol}')
+                continue
+
+            # 重新登记合约
+            self.symbols[vn_symbol] = pre_open_interest
+
+            # 发出订阅
+            req = SubscribeRequest(
+                symbol=vn_symbol,
+                exchange=Exchange(self.exchange)
+            )
+            self.gateway.subscribe(req)
+
+    def on_tick(self, tick):
+        """tick到达事件"""
+        # 更新tick
+        if self.ticks is {}:
+            self.ticks.update({tick.symbol: tick})
+            return
+
+        # 进行指数合成
+        if self.last_dt and tick.datetime.second != self.last_dt.second:
+            all_amount = 0
+            all_interest = 0
+            all_volume = 0
+            all_ask1 = 0
+            all_bid1 = 0
+            last_price = 0
+            ask_price_1 = 0
+            bid_price_1 = 0
+            mi_tick = None
+
+            # 已经积累的行情tick数量，不足总数减1，不处理
+
+            if len(self.ticks) < min(self.n * 0.8, 3):
+                self.gateway.write_log(f'{self.underlying_symbol}合约数据{len(self.ticks)}不足{self.n} 0.8,暂不合成指数')
+                return
+
+            # 计算所有合约的累加持仓量、资金、成交量、找出最大持仓量的主力合约
+            for t in self.ticks.values():
+                all_interest += t.open_interest
+                all_amount += t.last_price * t.open_interest
+                all_volume += t.volume
+                all_ask1 += t.ask_price_1 * t.open_interest
+                all_bid1 += t.bid_price_1 * t.open_interest
+                if mi_tick is None or mi_tick.open_interest < t.open_interest:
+                    mi_tick = t
+
+            # 总量 > 0
+            if all_interest > 0 and all_amount > 0:
+                last_price = round(float(all_amount / all_interest), 4)
+            # 卖1价
+            if all_ask1 > 0 and all_interest > 0:
+                ask_price_1 = round(float(all_ask1 / all_interest), 4)
+            # 买1价
+            if all_bid1 > 0 and all_interest > 0:
+                bid_price_1 = round(float(all_bid1 / all_interest), 4)
+
+            if mi_tick and last_price > 0:
+                idx_tick = deepcopy(mi_tick)
+                idx_tick.symbol = f'{self.underlying_symbol}99'
+                idx_tick.vt_symbol = f'{idx_tick.symbol}.{self.exchange}'
+                idx_tick.open_interest = all_interest
+                idx_tick.volume = all_volume
+                idx_tick.last_price = last_price
+                idx_tick.ask_price_1 = ask_price_1
+                idx_tick.bid_price_1 = bid_price_1
+
+                self.gateway.on_tick(idx_tick)
+
+        # 更新时间
+        self.last_dt = tick.datetime
+        # 更新tick
+        self.ticks.update({tick.symbol: tick})
+
 
 class LocalOrderManager:
     """

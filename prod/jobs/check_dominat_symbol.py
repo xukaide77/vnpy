@@ -16,8 +16,10 @@ os.environ["VNPY_TESTING"] = "1"
 
 from vnpy.data.tdx.tdx_future_data import *
 from vnpy.trader.util_wechat import send_wx_msg
-from vnpy.trader.utility import load_json, save_json
+from vnpy.trader.utility import load_json, save_json, append_data
 
+log_csv_name = 'dominat_change_history.csv'
+field_names = ['account_name', 'strategy_name', 'old_vt_symbol', 'new_vt_symbol', 'datetime']
 if __name__ == "__main__":
 
     if len(sys.argv) < 2:
@@ -86,7 +88,7 @@ if __name__ == "__main__":
                 next_mi_symbol = new_mi_symbol
 
             new_vt_symbol = '.'.join([new_mi_symbol, new_exchange])
-            new_full_symbol =get_full_symbol(new_mi_symbol).upper()
+            new_full_symbol = get_full_symbol(new_mi_symbol).upper()
             if full_symbol >= new_full_symbol:
                 print(f'{account_name}策略配置：长合约{full_symbol}， 主力长合约{new_full_symbol}，不更新')
                 continue
@@ -103,6 +105,16 @@ if __name__ == "__main__":
             setting.update({'vt_symbol': new_vt_symbol})
             send_wx_msg(f'{account_name}{strategy_name} 主力合约更换:{vt_symbol} => {new_vt_symbol} ')
             changed = True
+            # 写入日志csv，供后续检查
+            append_data(file_name=log_csv_name,
+                        dict_data={
+                            'account_name': account_name,
+                            'strategy_name': strategy_name,
+                            'old_vt_symbol': vt_symbol,
+                            'new_vt_symbol': new_vt_symbol,
+                            'datetime': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        },
+                        field_names=field_names)
 
         if changed:
             save_json(setting_file_path, settings)

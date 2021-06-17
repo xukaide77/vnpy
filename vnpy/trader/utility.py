@@ -82,7 +82,12 @@ def get_underlying_symbol(symbol: str):
 
 @lru_cache()
 def get_stock_exchange(code, vn=True):
-    """根据股票代码，获取交易所"""
+    """
+    根据股票代码，获取交易所
+    :param code:
+    :param vn: 返回vnpy的交易所格式;False: 返回ricequant的交易所格式
+    :return:
+    """
     # vn：取EXCHANGE_SSE 和 EXCHANGE_SZSE
     code = str(code)
     if len(code) < 6:

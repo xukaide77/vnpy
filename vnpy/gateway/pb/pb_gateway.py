@@ -1100,6 +1100,45 @@ class PbTdApi(object):
         return results
 
     def query_account(self):
+
+        if self.gateway.file_type == 'dbf':
+            self.query_account_dbf()
+        else:
+            self.query_account_csv()
+
+    def query_account_dbf(self):
+        """获取资金账号信息"""
+        # dbf 文件名
+        account_dbf = os.path.abspath(os.path.join(self.account_folder,
+                                                        '{}{}.dbf'.format(
+                                                            PB_FILE_NAMES.get('accounts'),
+                                                            self.trading_date)))
+        try:
+            # dbf => 资金帐号信息
+            self.gateway.write_log(f'扫描资金帐号信息:{account_dbf}')
+            table = dbf.Table(account_dbf, codepage='cp936')
+            table.open(dbf.READ_ONLY)
+            for data in table:
+                # ["资金账户"]
+                if str(data.zjzh).strip() != self.userid:
+                    continue
+                account = AccountData(
+                    gateway_name=self.gateway_name,
+                    accountid=self.userid,
+                    balance=float(data.dyjz), # ["单元净值"]
+                    frozen=float(data.dyjz) - float(data.kyye), # data["可用余额"]
+                    currency="人民币",
+                    trading_day=self.trading_day
+                )
+                self.gateway.on_account(account)
+
+            table.close()
+
+        except Exception as ex:
+            self.gateway.write_error(f'dbf扫描资金帐号异常:{str(ex)}')
+            self.gateway.write_error(traceback.format_exc())
+
+    def query_account_csv(self):
         """获取资金账号信息"""
         if self.gateway.pb_version == '2018':
             # 账号的文件
@@ -1134,6 +1173,67 @@ class PbTdApi(object):
 
     def query_position(self):
         """获取持仓信息"""
+        if self.gateway.file_type == 'dbf':
+            self.query_position_dbf()
+        else:
+            self.query_position_csv()
+
+    def query_position_dbf(self):
+        """从dbf文件获取持仓信息"""
+        # fields:['zqgs', 'zjzh', 'zhlx', 'zqdm', 'zqmc', 'zqlb', 'zxjg', 'cbjg', 'cpbh', 'cpmc', 'dybh', 'dymc', 'ccsl', 'dqcb', 'kysl', 'jjsz', 'qjsz', 'zqlx'
+        # , 'jysc', 'jybz', 'dryk', 'ljyk', 'fdyk', 'fyl', 'ykl', 'tzlx', 'gddm', 'mrsl', 'mcsl', 'mrje', 'mcje', 'zdf', 'bbj', 'qjcb', 'gtcb', 'gtyk', 'zgb']
+        # dbf 文件名
+        position_dbf = os.path.abspath(os.path.join(self.account_folder,
+                                                   '{}{}.dbf'.format(
+                                                       PB_FILE_NAMES.get('positions'),
+                                                       self.trading_date)))
+        try:
+            # dbf => 股票持仓信息
+            self.gateway.write_log(f'扫描股票持仓信息:{position_dbf}')
+            table = dbf.Table(position_dbf, codepage='cp936')
+            table.open(dbf.READ_ONLY)
+            for data in table:
+                if str(data.zjzh).strip() != self.userid:
+                    continue
+                symbol = str(data.zqdm).strip()  #["证券代码"]
+
+                # symbol => Exchange
+                exchange = symbol_exchange_map.get(symbol, None)
+                if not exchange:
+                    exchange_str = get_stock_exchange(code=symbol)
+                    if len(exchange_str) > 0:
+                        exchange = Exchange(exchange_str)
+                        symbol_exchange_map.update({symbol: exchange})
+
+                name = symbol_name_map.get(symbol, None)
+                if not name:
+                    name = data.zqmc # ["证券名称"]
+                    symbol_name_map.update({symbol: name})
+
+                position = PositionData(
+                    gateway_name=self.gateway_name,
+                    accountid=self.userid,
+                    symbol=symbol,  #["证券代码"],
+                    exchange=exchange,
+                    direction=Direction.NET,
+                    name=name,
+                    volume=int(data.ccsl), # ["持仓数量"]
+                    yd_volume=int(data.kysl),# ["可用数量"]
+                    price=float(data.cbjg), # ["成本价"]
+                    cur_price=float(data.zxjg), # ["最新价"]
+                    pnl=float(data.fdyk), # ["浮动盈亏"]
+                    holder_id=str(data.gddm).strip()  #["股东"]
+                )
+                self.gateway.on_position(position)
+
+            table.close()
+
+        except Exception as ex:
+            self.gateway.write_error(f'dbf扫描股票持仓异常:{str(ex)}')
+            self.gateway.write_error(traceback.format_exc())
+
+    def query_position_csv(self):
+        """从csv获取持仓信息"""
         if self.gateway.pb_version == '2018':
             # 持仓的文件
             positions_csv = os.path.abspath(os.path.join(self.account_folder,
@@ -1187,6 +1287,98 @@ class PbTdApi(object):
             self.gateway.on_position(position)
 
     def query_orders(self):
+        if self.gateway.file_type == 'dbf':
+            self.query_orders_dbf()
+        else:
+            self.query_orders_csv()
+
+    def query_orders_dbf(self):
+        """dbf文件获取所有委托"""
+        # fields:['zqgs', 'zjzh', 'zhlx', 'cpbh', 'cpmc', 'dybh', 'dymc', 'wtph', 'wtxh', 'zqdm', 'zqmc', 'wtfx', 'jglx', 'wtjg', 'wtsl', 'wtzt', 'cjsl', 'wtje'
+        # , 'cjjj', 'cdsl', 'jysc', 'fdyy', 'wtly', 'wtrq', 'wtsj', 'jybz']
+        orders_dbf = os.path.abspath(os.path.join(self.account_folder,
+                                                    '{}{}.dbf'.format(
+                                                        PB_FILE_NAMES.get('orders'),
+                                                        self.trading_date)))
+        try:
+            # dbf => 股票委托信息
+            self.gateway.write_log(f'扫描股票委托信息:{orders_dbf}')
+            table = dbf.Table(orders_dbf, codepage='cp936')
+            table.open(dbf.READ_ONLY)
+            for data in table:
+                if str(data.zjzh).strip() != self.userid: # ["资金账户"]
+                    continue
+
+                sys_orderid = str(data.wtxh).strip()  # ["委托序号"]
+
+                # 检查是否存在本地order_manager缓存中
+                order = self.gateway.order_manager.get_order_with_sys_orderid(sys_orderid)
+                order_date = str(data.wtrq).strip() #["委托日期"]
+                order_time = str(data.wtsj).strip() #["委托时间"]
+                order_status = STATUS_NAME2VT.get(str(data.wtzt).strip())  # ["委托状态"]
+
+                # 检查是否存在本地orders缓存中（系统级别的委托单）
+                sys_order = self.orders.get(sys_orderid, None)
+
+                if order is not None:
+                    continue
+                # 委托单不存在本地映射库，说明是其他地方下的单子，不是通过本接口下单
+                if sys_order is None:
+
+                    # 不处理以下状态
+                    if order_status in [Status.SUBMITTING, Status.REJECTED, Status.CANCELLED, Status.CANCELLING]:
+                        continue
+
+                    order_dt = datetime.strptime(f'{order_date} {order_time}', "%Y%m%d %H%M%S")
+                    direction = DIRECTION_STOCK_NAME2VT.get(str(data.wtfx).strip())  # ["委托方向"]
+                    offset = Offset.NONE
+                    if direction is None:
+                        direction = Direction.NET
+                    elif direction == Direction.LONG:
+                        offset = Offset.OPEN
+                    elif direction == Direction.SHORT:
+                        offset = Offset.CLOSE
+                    sys_order = OrderData(
+                        gateway_name=self.gateway_name,
+                        symbol=str(data.zqdm).strip(),  # ["证券代码"]
+                        exchange=EXCHANGE_NAME2VT.get(str(data.jysc).strip()), # ["交易市场"]
+                        orderid=sys_orderid,
+                        sys_orderid=sys_orderid,
+                        accountid=self.userid,
+                        type=ORDERTYPE_NAME2VT.get(str(data.jglx).strip(), OrderType.LIMIT),  # ["价格类型"]
+                        direction=direction,
+                        offset=offset,
+                        price=float(data.wtjg),  # ["委托价格"]
+                        volume=float(data.wtsl),  # ["委托数量"]
+                        traded=float(data.cjsl),  # ["成交数量"]
+                        status=order_status,
+                        datetime=order_dt,
+                        time=order_dt.strftime('%H:%M:%S')
+                    )
+                    # 直接发出订单更新事件
+                    self.gateway.write_log(f'账号订单查询，新增:{sys_order.__dict__}')
+                    self.orders.update({sys_order.sys_orderid: sys_order})
+                    self.gateway.on_order(sys_order)
+                    continue
+
+                # 存在账号缓存，判断状态是否更新
+                else:
+                    # 暂不处理，交给XHPT_WTCX模块处理
+                    if sys_order.status != order_status or sys_order.traded != float(data.cjsl): # ["成交数量"]
+                        sys_order.traded = float(data.cjsl) # ["成交数量"]
+                        sys_order.status = order_status
+                        self.orders.update({sys_order.sys_orderid: sys_order})
+                        self.gateway.write_log(f'账号订单查询，更新:{sys_order.__dict__}')
+                        self.gateway.on_order(sys_order)
+                        continue
+
+            table.close()
+
+        except Exception as ex:
+            self.gateway.write_error(f'dbf扫描股票委托异常:{str(ex)}')
+            self.gateway.write_error(traceback.format_exc())
+
+    def query_orders_csv(self):
         """获取所有委托"""
         # 所有委托的文件
         if self.gateway.pb_version == '2018':
@@ -1435,6 +1627,76 @@ class PbTdApi(object):
                 continue
 
     def query_trades(self):
+        if self.gateway.file_type == 'dbf':
+            self.query_trades_dbf()
+        else:
+            self.query_trades_csv()
+
+    def query_trades_dbf(self):
+        """dbf文件获取所有成交"""
+        # fields:['zqgs', 'zjzh', 'zhlx', 'cpbh', 'cpmc', 'dybh', 'dymc', 'cjxh', 'wtph', 'wtxh', 'zqdm', 'zqmc', 'wtfx', 'zqlb', 'ywfl', 'cjrq', 'cjsj', 'cjsl'
+        # , 'cjjg', 'zfy', 'cjje', 'jysc', 'jybz', 'wtly', 'rybh', 'rymc']
+        trades_dbf = os.path.abspath(os.path.join(self.account_folder,
+                                                  '{}{}.dbf'.format(
+                                                      PB_FILE_NAMES.get('trades'),
+                                                      self.trading_date)))
+        try:
+            # dbf => 股票成交信息
+            self.gateway.write_log(f'扫描股票成交信息:{trades_dbf}')
+            table = dbf.Table(trades_dbf, codepage='cp936')
+            table.open(dbf.READ_ONLY)
+            for data in table:
+                if str(data.zjzh).strip()!= self.userid: # ["资金账户"]
+                    continue
+
+                sys_orderid = str(data.wtxh) # ["委托序号"]
+                sys_tradeid = str(data.cjxh) # ["成交序号"]
+
+                # 检查是否存在本地trades缓存中
+                trade = self.trades.get(sys_tradeid, None)
+                order = self.gateway.order_manager.get_order_with_sys_orderid(sys_orderid)
+
+                # 如果交易不再本地映射关系
+                if trade is None and order is None:
+                    trade_date = str(data.cjrq).strip() #["成交日期"]
+                    trade_time = str(data.cjsj).strip() #["成交时间"]
+                    trade_dt = datetime.strptime(f'{trade_date} {trade_time}', "%Y%m%d %H%M%S")
+                    direction = DIRECTION_STOCK_NAME2VT.get(str(data.wtfx).strip()) # ["委托方向"]
+                    offset = Offset.NONE
+                    if direction is None:
+                        direction = Direction.NET
+                    elif direction == Direction.LONG:
+                        offset = Offset.OPEN
+                    elif direction == Direction.SHORT:
+                        offset = Offset.CLOSE
+                    trade = TradeData(
+                        gateway_name=self.gateway_name,
+                        symbol=str(data.zqdm).strip(), # ["证券代码"]
+                        exchange=EXCHANGE_NAME2VT.get(str(data.jysc).strip()), # ["交易市场"]
+                        orderid=sys_tradeid,
+                        tradeid=sys_tradeid,
+                        sys_orderid=sys_orderid,
+                        accountid=self.userid,
+                        direction=direction,
+                        offset=offset,
+                        price=float(data.cjjg),  # ["成交价格"]
+                        volume=float(data.cjsl), # ["成交数量"]
+                        datetime=trade_dt,
+                        time=trade_dt.strftime('%H:%M:%S'),
+                        trade_amount=float(data.cjje), # ["成交金额"]
+                        commission=float(data.zfy) # ["总费用"]
+                    )
+                    self.trades[sys_tradeid] = trade
+                    self.gateway.on_trade(copy.copy(trade))
+                    continue
+            table.close()
+
+        except Exception as ex:
+            self.gateway.write_error(f'dbf扫描股票成交异常:{str(ex)}')
+            self.gateway.write_error(traceback.format_exc())
+
+
+    def query_trades_csv(self):
         """获取所有成交"""
         # 所有成交的文件
         if self.gateway.pb_version == '2018':
@@ -2105,7 +2367,7 @@ class TqMdApi():
             return
         try:
             from tqsdk import TqApi
-            self.api = TqApi(_stock=True, url="wss://u.shinnytech.com/t/nfmd/front/mobile")
+            self.api = TqApi(_stock=True, url="wss://api.shinnytech.com/t/nfmd/front/mobile")
         except Exception as e:
             self.gateway.write_log(f'天勤股票行情API接入异常:'.format(str(e)))
             self.gateway.write_log(traceback.format_exc())

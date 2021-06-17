@@ -854,6 +854,18 @@ class CtaGridTrade(CtaComponent):
                 except Exception:
                     pass
 
+    def to_json(self):
+        data = {}
+        up_grids = []
+        for grid in self.up_grids:
+            up_grids.append(grid.to_json())
+        dn_grids = []
+        for grid in self.dn_grids:
+            dn_grids.append(grid.to_json())
+        data[u'up_grids'] = up_grids
+        data[u'dn_grids'] = dn_grids
+        return data
+
     def save(self, **kwargs):
         """
         保存网格至本地Json文件
@@ -879,15 +891,7 @@ class CtaGridTrade(CtaComponent):
         grid_json_file = str(grids_save_path.joinpath(u'{}_Grids.json'.format(self.json_name)))
         self.json_file_path = grid_json_file
 
-        data = {}
-        up_grids = []
-        for grid in self.up_grids:
-            up_grids.append(grid.to_json())
-        dn_grids = []
-        for grid in self.dn_grids:
-            dn_grids.append(grid.to_json())
-        data[u'up_grids'] = up_grids
-        data[u'dn_grids'] = dn_grids
+        data = self.to_json()
 
         with open(grid_json_file, 'w', encoding='utf8') as f:
             json_data = json.dumps(data, indent=4, ensure_ascii=False)

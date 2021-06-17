@@ -30,12 +30,22 @@ from vnpy.trader.constant import (
 )
 
 from vnpy.trader.utility import (
-    get_trading_date,
     extract_vt_symbol,
+    get_underlying_symbol,
+    get_trading_date,
+    import_module_by_str
 )
 
 from .back_testing import BackTestingEngine
 
+# vnpy交易所，与淘宝数据tick目录得对应关系
+VN_EXCHANGE_TICKFOLDER_MAP = {
+    Exchange.SHFE.value: 'SQ',
+    Exchange.DCE.value: 'DL',
+    Exchange.CZCE.value: 'ZZ',
+    Exchange.CFFEX.value: 'ZJ',
+    Exchange.INE.value: 'SQ'
+}
 
 class PortfolioTestingEngine(BackTestingEngine):
     """
@@ -57,6 +67,8 @@ class PortfolioTestingEngine(BackTestingEngine):
         self.bar_interval_seconds = 60  # bar csv文件，属于K线类型，K线的周期（秒数）,缺省是1分钟
 
         self.tick_path = None  # tick级别回测， 路径
+        self.use_tq = False    # True:使用tq csv数据; False:使用淘宝购买的csv数据(19年之前)
+        self.use_pkb2 = True  # 使用tdx下载的逐笔成交数据（pkb2压缩格式），模拟tick
 
     def load_bar_csv_to_df(self, vt_symbol, bar_file, data_start_date=None, data_end_date=None):
         """加载回测bar数据到DataFrame"""
@@ -101,6 +113,7 @@ class PortfolioTestingEngine(BackTestingEngine):
             # 加载csv文件 =》 dateframe
             symbol_df = pd.read_csv(bar_file, dtype=data_types)
             if len(symbol_df)==0:
+                print(f'回测时加载{vt_symbol} csv文件{bar_file}失败。', file=sys.stderr)
                 self.write_error(f'回测时加载{vt_symbol} csv文件{bar_file}失败。')
                 return False
 
@@ -133,7 +146,8 @@ class PortfolioTestingEngine(BackTestingEngine):
         """
         self.output('comine_df')
         if len(self.bar_df_dict) == 0:
-            self.output(f'无加载任何数据,请检查bar文件路径配置')
+            print(f'{self.test_name}:无加载任何数据,请检查bar文件路径配置',file=sys.stderr)
+            self.output(f'{self.test_name}:无加载任何数据,请检查bar文件路径配置')
 
         self.bar_df = pd.concat(self.bar_df_dict, axis=0).swaplevel(0, 1).sort_index()
         self.bar_df_dict.clear()
@@ -141,6 +155,11 @@ class PortfolioTestingEngine(BackTestingEngine):
     def prepare_env(self, test_setting):
         self.output('portfolio prepare_env')
         super().prepare_env(test_setting)
+
+        self.use_tq = test_setting.get('use_tq', False)
+        self.use_pkb2 = test_setting.get('use_pkb2', True)
+        if self.use_tq:
+            self.use_pkb2 = False
 
     def prepare_data(self, data_dict):
         """
@@ -343,6 +362,138 @@ class PortfolioTestingEngine(BackTestingEngine):
             traceback.print_exc()
             return
 
+    def load_csv_file(self, tick_folder, vt_symbol, tick_date):
+        """从文件中读取tick，返回list[{dict}]"""
+
+        # 使用天勤tick数据
+        if self.use_tq:
+            return self.load_tq_csv_file(tick_folder, vt_symbol, tick_date)
+
+        # 使用淘宝下载的tick数据（2019年前）
+        symbol, exchange = extract_vt_symbol(vt_symbol)
+        underly_symbol = get_underlying_symbol(symbol)
+        exchange_folder = VN_EXCHANGE_TICKFOLDER_MAP.get(exchange.value)
+
+        if exchange == Exchange.INE:
+            file_path = os.path.abspath(
+                os.path.join(
+                    tick_folder,
+                    exchange_folder,
+                    tick_date.strftime('%Y'),
+                    tick_date.strftime('%Y%m'),
+                    tick_date.strftime('%Y%m%d'),
+                    '{}_{}.csv'.format(symbol.upper(), tick_date.strftime('%Y%m%d'))))
+        else:
+            file_path = os.path.abspath(
+                os.path.join(
+                    tick_folder,
+                    exchange_folder,
+                    tick_date.strftime('%Y'),
+                    tick_date.strftime('%Y%m'),
+                    tick_date.strftime('%Y%m%d'),
+                    '{}{}_{}.csv'.format(underly_symbol.upper(), symbol[-2:], tick_date.strftime('%Y%m%d'))))
+
+        ticks = []
+        if not os.path.isfile(file_path):
+            self.write_log(f'{file_path}文件不存在')
+            return None
+
+        df = pd.read_csv(file_path, encoding='gbk', parse_dates=False)
+        df.columns = ['date', 'time', 'last_price', 'volume', 'last_volume', 'open_interest',
+                      'bid_price_1', 'bid_volume_1', 'bid_price_2', 'bid_volume_2', 'bid_price_3', 'bid_volume_3',
+                      'ask_price_1', 'ask_volume_1', 'ask_price_2', 'ask_volume_2', 'ask_price_3', 'ask_volume_3', 'BS']
+
+        self.write_log(u'加载csv文件{}'.format(file_path))
+        last_time = None
+        for index, row in df.iterrows():
+            # 日期, 时间, 成交价, 成交量, 总量, 属性(持仓增减), B1价, B1量, B2价, B2量, B3价, B3量, S1价, S1量, S2价, S2量, S3价, S3量, BS
+            # 0    1      2      3       4      5               6     7    8     9     10     11    12    13    14   15    16   17    18
+
+            tick = row.to_dict()
+            tick.update({'symbol': symbol, 'exchange': exchange.value, 'trading_day': tick_date.strftime('%Y-%m-%d')})
+            tick_datetime = datetime.strptime(tick['date'] + ' ' + tick['time'], '%Y-%m-%d %H:%M:%S')
+
+            # 修正毫秒
+            if tick['time'] == last_time:
+                # 与上一个tick的时间（去除毫秒后）相同,修改为500毫秒
+                tick_datetime = tick_datetime.replace(microsecond=500)
+                tick['time'] = tick_datetime.strftime('%H:%M:%S.%f')
+            else:
+                last_time = tick['time']
+                tick_datetime = tick_datetime.replace(microsecond=0)
+                tick['time'] = tick_datetime.strftime('%H:%M:%S.%f')
+            tick['datetime'] = tick_datetime
+
+            # 排除涨停/跌停的数据
+            if (float(tick['bid_price_1']) == float('1.79769E308') and int(tick['bid_volume_1']) == 0) \
+                    or (float(tick['ask_price_1']) == float('1.79769E308') and int(tick['ask_volume_1']) == 0):
+                continue
+
+            ticks.append(tick)
+
+        del df
+
+        return ticks
+
+    def load_tq_csv_file(self, tick_folder, vt_symbol, tick_date):
+        """从天勤下载的csv文件中读取tick，返回list[{dict}]"""
+
+        symbol, exchange = extract_vt_symbol(vt_symbol)
+        underly_symbol = get_underlying_symbol(symbol)
+        exchange_folder = VN_EXCHANGE_TICKFOLDER_MAP.get(exchange.value)
+
+        file_path = os.path.abspath(
+            os.path.join(
+                tick_folder,
+                tick_date.strftime('%Y%m'),
+                '{}_{}.csv'.format(symbol, tick_date.strftime('%Y%m%d'))))
+
+        ticks = []
+        if not os.path.isfile(file_path):
+            self.write_log(u'{}文件不存在'.format(file_path))
+            return None
+        try:
+            df = pd.read_csv(file_path, parse_dates=False)
+            # datetime,symbol,exchange,last_price,highest,lowest,volume,amount,open_interest,upper_limit,lower_limit,
+            # bid_price_1,bid_volume_1,ask_price_1,ask_volume_1,
+            # bid_price_2,bid_volume_2,ask_price_2,ask_volume_2,
+            # bid_price_3,bid_volume_3,ask_price_3,ask_volume_3,
+            # bid_price_4,bid_volume_4,ask_price_4,ask_volume_4,
+            # bid_price_5,bid_volume_5,ask_price_5,ask_volume_5
+
+            self.write_log(u'加载csv文件{}'.format(file_path))
+            last_time = None
+            for index, row in df.iterrows():
+
+                tick = row.to_dict()
+                tick['date'], tick['time'] = tick['datetime'].split(' ')
+                tick.update({'trading_day': tick_date.strftime('%Y-%m-%d')})
+                tick_datetime = datetime.strptime(tick['datetime'], '%Y-%m-%d %H:%M:%S.%f')
+
+                # 修正毫秒
+                if tick['time'] == last_time:
+                    # 与上一个tick的时间（去除毫秒后）相同,修改为500毫秒
+                    tick_datetime = tick_datetime.replace(microsecond=500)
+                    tick['time'] = tick_datetime.strftime('%H:%M:%S.%f')
+                else:
+                    last_time = tick['time']
+                    tick_datetime = tick_datetime.replace(microsecond=0)
+                    tick['time'] = tick_datetime.strftime('%H:%M:%S.%f')
+                tick['datetime'] = tick_datetime
+
+                # 排除涨停/跌停的数据
+                if (float(tick['bid_price_1']) == float('1.79769E308') and int(tick['bid_volume_1']) == 0) \
+                        or (float(tick['ask_price_1']) == float('1.79769E308') and int(tick['ask_volume_1']) == 0):
+                    continue
+
+                ticks.append(tick)
+
+            del df
+        except Exception as ex:
+            self.write_log(f'{file_path}文件读取不成功: {str(ex)}')
+            return None
+        return ticks
+
     def load_bz2_cache(self, cache_folder, cache_symbol, cache_date):
         """加载缓存数据"""
         if not os.path.exists(cache_folder):
@@ -372,9 +523,15 @@ class PortfolioTestingEngine(BackTestingEngine):
 
         for vt_symbol in list(self.symbol_strategy_map.keys()):
             symbol, exchange = extract_vt_symbol(vt_symbol)
-            tick_list = self.load_bz2_cache(cache_folder=self.tick_path,
-                                            cache_symbol=symbol,
-                                            cache_date=test_day.strftime('%Y%m%d'))
+            if self.use_pkb2:
+                tick_list = self.load_bz2_cache(cache_folder=self.tick_path,
+                                                cache_symbol=symbol,
+                                                cache_date=test_day.strftime('%Y%m%d'))
+            else:
+                tick_list = self.load_csv_file(tick_folder=self.tick_path,
+                                               vt_symbol=vt_symbol,
+                                               tick_date=test_day)
+
             if not tick_list or len(tick_list) == 0:
                 continue
 
@@ -415,6 +572,13 @@ class PortfolioTestingEngine(BackTestingEngine):
             try:
                 for (dt, vt_symbol), tick_data in combined_df.iterrows():
                     symbol, exchange = extract_vt_symbol(vt_symbol)
+                    last_price = tick_data.get('last_price',None)
+                    if not last_price:
+                        last_price = tick_data.get('price',None)
+                    if not isinstance(last_price, float):
+                        continue
+                    if np.isnan(last_price):
+                        continue
                     tick = TickData(
                         gateway_name='backtesting',
                         symbol=symbol,
@@ -423,13 +587,10 @@ class PortfolioTestingEngine(BackTestingEngine):
                         date=dt.strftime('%Y-%m-%d'),
                         time=dt.strftime('%H:%M:%S.%f'),
                         trading_day=test_day.strftime('%Y-%m-%d'),
-                        last_price=tick_data['price'],
+                        last_price=last_price,
                         volume=tick_data['volume']
                     )
-                    if not isinstance(tick.last_price,float):
-                        continue
-                    if np.isnan(tick.last_price):
-                        continue
+
                     self.new_tick(tick)
 
                 # 结束一个交易日后，更新每日净值

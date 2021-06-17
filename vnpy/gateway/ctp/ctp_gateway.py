@@ -55,7 +55,7 @@ from vnpy.trader.constant import (
     OptionType,
     Interval
 )
-from vnpy.trader.gateway import BaseGateway, TickCombiner
+from vnpy.trader.gateway import BaseGateway, TickCombiner, IndexGenerator
 from vnpy.trader.object import (
     TickData,
     BarData,
@@ -264,8 +264,18 @@ class CtpGateway(BaseGateway):
         self.combiners = {}
         self.tick_combiner_map = {}
 
+        # 本地指数行情合成器{ 'rb2110':x, 'rb2201':x',,}
+        self.index_generators = {}
+        # 已经创建得指数合成器symbol列表 ['RB99','J99',,,]
+        self.subscribed_index_symbols = []
+
     def connect(self, setting: dict):
-        """"""
+        """
+        连接交易服务器、行情服务器
+        行情服务器包括：ctp普通行情、ctp5档行情（上海、能源所）、tdx指数行情、rabbitMQ指数行情、天勤指数行情
+        :param setting:
+        :return:
+        """
         userid = setting["用户名"]
         password = setting["密码"]
         brokerid = setting["经纪商代码"]
@@ -277,6 +287,7 @@ class CtpGateway(BaseGateway):
         product_info = setting["产品信息"]
         rabbit_dict = setting.get('rabbit', None)
         tq_dict = setting.get('tq', None)
+        tdx_dict = setting.get('tdx', None)
         if (
                 (not td_address.startswith("tcp://"))
                 and (not td_address.startswith("ssl://"))
@@ -331,7 +342,7 @@ class CtpGateway(BaseGateway):
             self.write_log(f'激活天勤行情接口')
             self.tq_api = TqMdApi(gateway=self)
             self.tq_api.connect(tq_dict)
-        else:
+        elif tdx_dict is not None:
             self.write_log(f'激活通达信行情接口')
             self.tdx_api = TdxMdApi(gateway=self)
             self.tdx_api.connect()
@@ -340,6 +351,13 @@ class CtpGateway(BaseGateway):
 
         for (vt_symbol, is_bar) in list(self.subscribed_symbols):
             symbol, exchange = extract_vt_symbol(vt_symbol)
+            # 获取合约的缩写号
+            underlying_symbol = get_underlying_symbol(vt_symbol)
+            dt = datetime.now()
+            # 若为中金所等的合约，白天才提交订阅请求
+            if underlying_symbol in MARKET_DAY_ONLY and not (8 < dt.hour < 16):
+                continue
+
             req = SubscribeRequest(
                 symbol=symbol,
                 exchange=exchange,
@@ -369,13 +387,17 @@ class CtpGateway(BaseGateway):
     def check_status(self):
         """检查状态"""
 
+        # 检查交易接口、行情接口的连接状态
         if self.td_api.connect_status and self.md_api.connect_status:
             self.status.update({'con': True})
 
+        # 检查通达信行情接口（直接连通达信）
         if self.tdx_api:
             self.tdx_api.check_status()
-        if self.tdx_api is None or self.md_api is None:
-            return False
+
+        # 检查天勤行情接口
+        if self.tq_api:
+            self.tq_api.check_status()
 
         if not self.td_api.connect_status or self.md_api.connect_status:
             return False
@@ -383,7 +405,14 @@ class CtpGateway(BaseGateway):
         return True
 
     def subscribe(self, req: SubscribeRequest):
-        """"""
+        """
+        订阅合约行情
+        普通合约 => ctp行情、5档行情
+        指数合约 => 通达信、rabbitMQ，天勤
+        套利合约 => 合约合并器
+        :param req:
+        :return:
+        """
         try:
             if self.md_api:
                 # 如果是自定义的套利合约符号
@@ -436,6 +465,7 @@ class CtpGateway(BaseGateway):
                     return
                 elif req.exchange == Exchange.SPD:
                     self.write_error(u'自定义合约{}不在CTP设置中'.format(req.symbol))
+                    return
 
                 # 指数合约，从tdx行情订阅
                 if req.symbol[-2:] in ['99']:
@@ -449,6 +479,11 @@ class CtpGateway(BaseGateway):
                     elif self.tq_api:
                         self.write_log(f'使用天勤接口订阅{req.symbol}')
                         self.tq_api.subscribe(req)
+                    else:
+                        if req.symbol not in self.subscribed_index_symbols:
+                            self.write_log(f'使用本地指数生成器进行订阅')
+                            self.subscribe_local_index(req)
+
                 else:
                     # 上期所、上能源支持五档行情，使用天勤接口
                     if self.tq_api and req.exchange in [Exchange.SHFE, Exchange.INE]:
@@ -457,8 +492,9 @@ class CtpGateway(BaseGateway):
                     if self.l2_md_api and req.exchange in [Exchange.SHFE, Exchange.INE]:
                         self.write_log(f'使用五档行情接口订阅:{req.symbol}')
                         self.l2_md_api.subscribe(req)
+
                     else:
-                        self.write_log(f'使用CTP接口订阅{req.symbol}')
+                        #self.write_log(f'使用CTP接口订阅{req.symbol}')
                         self.md_api.subscribe(req)
 
             # Allow the strategies to start before the connection
@@ -480,6 +516,26 @@ class CtpGateway(BaseGateway):
         self.write_log(u'创建:{}的一分钟行情产生器'.format(vt_symbol))
         bg = BarGenerator(on_bar=self.on_bar)
         self.klines.update({vt_symbol: bg})
+
+    def subscribe_local_index(self, req):
+        """
+        订阅本地合约
+        :param req:
+        :return:
+        """
+        underlying_symbol = get_underlying_symbol(req.symbol)
+        symbol_info = future_contracts.get(underlying_symbol,None)
+        if symbol_info:
+            generator = IndexGenerator(gateway=self, setting=symbol_info)
+
+            # 登记订阅真实合约 <=>合成器 关系
+            for vn_symbol in generator.symbols:
+                self.index_generators[vn_symbol] = generator
+
+            # 登记指数合约到本地已订阅信息
+            self.subscribed_index_symbols.append(req.symbol)
+        else:
+            self.write_error(f'{underlying_symbol}信息没有在vnpy/data/tdx/future_contracts.json文件中,不能创建指数订阅')
 
     def send_order(self, req: OrderRequest):
         """"""
@@ -563,11 +619,15 @@ class CtpGateway(BaseGateway):
     def on_custom_tick(self, tick):
         """推送自定义合约行情"""
         # 自定义合约行情
-
         for combiner in self.tick_combiner_map.get(tick.symbol, []):
             tick = copy(tick)
             combiner.on_tick(tick)
 
+        # 推送至指数生成器
+        if tick.symbol in self.index_generators:
+            tick = copy(tick)
+            # 推送on_tick()方法
+            self.index_generators[tick.symbol].on_tick(tick)
 
 class CtpMdApi(MdApi):
     """"""
@@ -600,6 +660,7 @@ class CtpMdApi(MdApi):
         Callback when front server is connected.
         """
         self.gateway.write_log(f"{self.name}行情服务器连接成功")
+        self.connect_status = True
         self.login()
         self.gateway.status.update(
             {f'{self.name}md_con': True, f'{self.name}md_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
@@ -609,6 +670,7 @@ class CtpMdApi(MdApi):
         Callback when front server is disconnected.
         """
         self.login_status = False
+        self.connect_status = False
         self.gateway.write_log(f"{self.name}行情服务器连接断开，原因{reason}")
         self.gateway.status.update(
             {f'{self.name}md_con': False, f'{self.name}md_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
@@ -675,7 +737,7 @@ class CtpMdApi(MdApi):
             date=s_date,
             time=dt.strftime('%H:%M:%S.%f'),
             trading_day=trading_day,
-            name=symbol_name_map[symbol],
+            name=symbol_name_map.get(symbol,symbol),
             volume=today_volume,
             last_volume=volume_changed,
             open_interest=data["OpenInterest"],
@@ -746,6 +808,7 @@ class CtpMdApi(MdApi):
         """
         Login onto server.
         """
+        self.gateway.write_log(f'{self.name}向行情服务器发出登录请求')
         req = {
             "UserID": self.userid,
             "Password": self.password,
@@ -759,8 +822,9 @@ class CtpMdApi(MdApi):
         """
         Subscribe to tick data update.
         """
-        if self.login_status:
+        if req.symbol not in self.subscribed:
             self.gateway.write_log(f'{self.name}订阅:{req.exchange} {req.symbol}')
+        if self.login_status:
             self.subscribeMarketData(req.symbol)
         self.subscribed.add(req.symbol)
 
@@ -814,27 +878,30 @@ class CtpTdApi(TdApi):
     def onFrontConnected(self):
         """"""
         self.gateway.write_log("交易服务器连接成功")
-
+        self.connect_status = True
         if self.auth_code:
+            self.gateway.write_log("向交易服务器提交授权码验证")
             self.authenticate()
         else:
+            self.gateway.write_log("向交易服务器进行帐号登录")
             self.login()
-            self.gateway.status.update({'td_con': True, 'td_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
     def onFrontDisconnected(self, reason: int):
         """"""
         self.login_status = False
         self.gateway.write_log(f"交易服务器连接断开，原因{reason}")
-        self.gateway.status.update({'td_con': True, 'td_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+        self.gateway.status.update({'td_con': False, 'td_dis_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
 
     def onRspAuthenticate(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
         if not error['ErrorID']:
             self.auth_staus = True
             self.gateway.write_log("交易服务器授权验证成功")
+            self.gateway.status.update({"td_auth": True})
             self.login()
         else:
             self.gateway.write_error("交易服务器授权验证失败", error)
+            self.gateway.status.update({"td_auth":False})
 
     def onRspUserLogin(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -842,7 +909,8 @@ class CtpTdApi(TdApi):
             self.frontid = data["FrontID"]
             self.sessionid = data["SessionID"]
             self.login_status = True
-            self.gateway.write_log("交易服务器登录成功")
+            self.gateway.status.update({'td_con': True, 'td_con_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
+            self.gateway.write_log("交易帐号登录完成")
 
             # Confirm settlement
             req = {
@@ -853,7 +921,7 @@ class CtpTdApi(TdApi):
             self.reqSettlementInfoConfirm(req, self.reqid)
         else:
             self.login_failed = True
-
+            self.gateway.status.update({'td_con': False,'td_login_fail_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')})
             self.gateway.write_error("交易服务器登录失败", error)
 
     def onRspOrderInsert(self, data: dict, error: dict, reqid: int, last: bool):
@@ -975,7 +1043,12 @@ class CtpTdApi(TdApi):
                     if act_symbol != pas_symbol:
                         self.gateway.subscribe(SubscribeRequest(symbol=position.symbol, exchange=position.exchange))
                 else:
-                    self.gateway.subscribe(SubscribeRequest(symbol=position.symbol, exchange=position.exchange))
+                    # 获取合约的缩写号
+                    underlying_symbol = get_underlying_symbol(position.symbol)
+                    dt = datetime.now()
+                    # 若为中金所等的合约，白天才提交订阅请求
+                    if not (underlying_symbol in MARKET_DAY_ONLY and not (8 < dt.hour < 16)):
+                        self.gateway.subscribe(SubscribeRequest(symbol=position.symbol, exchange=position.exchange))
 
         if last:
             self.long_option_cost = None
@@ -1267,7 +1340,7 @@ class CtpTdApi(TdApi):
 
             self.registerFront(address)
             self.init()
-
+            self.gateway.write_log(f'交易前端连接成功')
             self.connect_status = True
         else:
             self.authenticate()
@@ -1276,6 +1349,7 @@ class CtpTdApi(TdApi):
         """
         Authenticate with auth_code and appid.
         """
+
         req = {
             "UserID": self.userid,
             "BrokerID": self.brokerid,
@@ -1580,6 +1654,10 @@ class TdxMdApi():
         self.check_status()
 
     def check_status(self):
+        """
+        检查通达信直连状态
+        :return:
+        """
         # self.write_log(u'检查tdx接口状态')
         if len(self.registered_symbol_set) == 0:
             return
@@ -1782,7 +1860,13 @@ class TdxMdApi():
                 continue
 
             # self.gateway.write_log(f'{tick.__dict__}')
+            pre_tick = self.symbol_tick_dict.get(tick.symbol, None)
             self.symbol_tick_dict[tick.symbol] = tick
+
+            # 排除指数的异常数据(tdx有些服务器异常，返回数据偏差超过上一tick的20%）
+            if pre_tick:
+                if tick.last_price > pre_tick.last_price * 1.2 or tick.last_price < pre_tick.last_price * 0.8:
+                    continue
 
             self.gateway.on_tick(tick)
             self.gateway.on_custom_tick(tick)
@@ -1799,6 +1883,8 @@ class SubMdApi():
 
         self.symbol_tick_dict = {}  # 合约与最后一个Tick得字典
         self.registed_symbol_set = set()  # 订阅的合约记录集
+
+        self.last_tick_dt = None
 
         self.sub = None
         self.setting = {}
@@ -1826,8 +1912,44 @@ class SubMdApi():
             self.gateway.write_error(traceback.format_exc())
             self.connect_status = False
 
+    def check_status(self):
+        """接口状态的健康检查"""
+        self.gateway.write_log("检查sub接口的状态")
+        # 订阅的合约
+        d = {'sub_symbols': sorted(self.symbol_tick_dict.keys())}
+
+        # 合约的最后时间
+        if self.last_tick_dt:
+            d.update({"sub_tick_time": self.last_tick_dt.strftime('%Y-%m-%d %H:%M:%S')})
+
+        if len(self.symbol_tick_dict) > 0:
+            dt_now = datetime.now()
+            hh_mm = dt_now.hour * 100 + dt_now.minute
+            # 期货交易时间内
+            if 900 <= hh_mm <= 1130 or 1300 <= hh_mm <= 1500 or hh_mm < 230 or hh_mm >= 2100:
+                # 未有数据到达
+                if self.last_tick_dt is None:
+                    d.update({"sub_status": False, "sub_error": u"rabbitmq未有行情数据到达"})
+                else: # 有数据
+
+                    # 超时15分钟以上
+                    if (dt_now - self.last_tick_dt).total_seconds() > 60 * 15:
+                        d.update({"sub_status": False,
+                                  "sub_error": u"{}rabbitmq行情数据超时15分钟以上".format(hh_mm)})
+                    else:
+                        d.update({"sub_status": True})
+                        self.gateway.status.pop("sub_error", None)
+
+            # 非交易时间
+            else:
+                self.gateway.status.pop("sub_status", None)
+                self.gateway.status.pop("sub_error", None)
+
+        # 更新到gateway的状态中去
+        self.gateway.status.update(d)
+
     def on_message(self, chan, method_frame, _header_frame, body, userdata=None):
-        # print(" [x] %r" % body)
+        #print(" [x] %r" % body)
         try:
             str_tick = body.decode('utf-8')
             d = json.loads(str_tick)
@@ -1836,6 +1958,8 @@ class SubMdApi():
             d = self.conver_update(d)
 
             symbol = d.pop('symbol', None)
+            if symbol == 'ZC99':
+                a = 1
             str_datetime = d.pop('datetime', None)
             if symbol not in self.registed_symbol_set or str_datetime is None:
                 return
@@ -1848,13 +1972,22 @@ class SubMdApi():
                             exchange=Exchange(d.get('exchange')),
                             symbol=symbol,
                             datetime=dt)
+
             d.pop('exchange', None)
             d.pop('symbol', None)
             tick.__dict__.update(d)
             if len(tick.trading_day) == 0:
                 tick.trading_day = get_trading_date(dt)
 
+            pre_tick = self.symbol_tick_dict.get(symbol,None)
             self.symbol_tick_dict[symbol] = tick
+            # 排除指数的异常数据(tdx有些服务器异常，返回数据偏差超过上一tick的20%）
+            if pre_tick:
+                if tick.last_price > pre_tick.last_price * 1.2 or tick.last_price < pre_tick.last_price * 0.8:
+                    return
+
+            self.last_tick_dt = tick.datetime
+
             self.gateway.on_tick(tick)
             self.gateway.on_custom_tick(tick)
 
@@ -1984,6 +2117,11 @@ class TqMdApi():
             self.gateway.write_log(f'天勤行情API已连接')
             self.update_thread = Thread(target=self.update)
             self.update_thread.start()
+
+    def check_status(self):
+        """检查接口状态"""
+
+        pass
 
     def generate_tick_from_quote(self, vt_symbol, quote) -> TickData:
         """

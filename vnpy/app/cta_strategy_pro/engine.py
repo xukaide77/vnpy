@@ -407,7 +407,7 @@ class CtaEngine(BaseEngine):
                 underlying_symbol = get_underlying_symbol(vt_symbol)
                 dt = datetime.now()
                 # 若为中金所的合约，白天才提交订阅请求
-                if underlying_symbol in MARKET_DAY_ONLY and not (9 < dt.hour < 16):
+                if underlying_symbol in MARKET_DAY_ONLY and not (9 <= dt.hour < 16):
                     continue
 
                 self.write_log(f'重新提交合约{vt_symbol}订阅请求')
@@ -1248,9 +1248,14 @@ class CtaEngine(BaseEngine):
         """
         strategy = self.strategies[strategy_name]
         if strategy.trading:
-            err_msg = f"策略{strategy.strategy_name}移除失败，请先停止"
-            self.write_error(err_msg)
-            return False, err_msg
+            # err_msg = f"策略{strategy.strategy_name}正在运行，先停止"
+            # self.write_error(err_msg)
+            # return False, err_msg
+            ret, msg = self.stop_strategy(strategy_name)
+            if not ret:
+                return False, msg
+            else:
+                self.write_log(msg)
 
         # Remove setting
         self.remove_strategy_setting(strategy_name)

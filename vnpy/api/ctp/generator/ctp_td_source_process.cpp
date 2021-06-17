@@ -806,6 +806,8 @@ void TdApi::processRspCombActionInsert(Task *task)
 		data["IPAddress"] = toUtf(task_data->IPAddress);
 		data["MacAddress"] = toUtf(task_data->MacAddress);
 		data["InvestUnitID"] = toUtf(task_data->InvestUnitID);
+		data["FrontID"] = task_data->FrontID;
+		data["SessionID"] = task_data->SessionID;
 		delete task_data;
 	}
 	dict error;
@@ -1006,6 +1008,9 @@ void TdApi::processRspQryInvestorPosition(Task *task)
 		data["ExchangeID"] = toUtf(task_data->ExchangeID);
 		data["YdStrikeFrozen"] = task_data->YdStrikeFrozen;
 		data["InvestUnitID"] = toUtf(task_data->InvestUnitID);
+		data["PositionCostOffset"] = task_data->PositionCostOffset;
+		data["TasPosition"] = task_data->TasPosition;
+		data["TasPositionCost"] = task_data->TasPositionCost;
 		delete task_data;
 	}
 	dict error;
@@ -1475,7 +1480,9 @@ void TdApi::processRspQryInvestorPositionDetail(Task *task)
 		data["SettlementPrice"] = task_data->SettlementPrice;
 		data["CloseVolume"] = task_data->CloseVolume;
 		data["CloseAmount"] = task_data->CloseAmount;
+		data["TimeFirstVolume"] = task_data->TimeFirstVolume;
 		data["InvestUnitID"] = toUtf(task_data->InvestUnitID);
+		data["SpecPosiType"] = task_data->SpecPosiType;
 		delete task_data;
 	}
 	dict error;
@@ -3514,6 +3521,8 @@ void TdApi::processErrRtnCombActionInsert(Task *task)
 		data["IPAddress"] = toUtf(task_data->IPAddress);
 		data["MacAddress"] = toUtf(task_data->MacAddress);
 		data["InvestUnitID"] = toUtf(task_data->InvestUnitID);
+		data["FrontID"] = task_data->FrontID;
+		data["SessionID"] = task_data->SessionID;
 		delete task_data;
 	}
 	dict error;

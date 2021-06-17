@@ -1015,6 +1015,11 @@ class BinancefDataWebsocketApi(WebsocketClient):
             self.gateway.write_log(f"找不到该合约代码{req.symbol}")
             return
 
+        if req.symbol.lower() in self.ticks:
+            self.gateway.write_log(f'{req.symbol}已订阅过,不重复订阅')
+            return
+
+        self.gateway.write_log(f'开始订阅合约{req.symbol}')
         # Create tick buf data
         tick = TickData(
             symbol=req.symbol,
@@ -1027,8 +1032,13 @@ class BinancefDataWebsocketApi(WebsocketClient):
 
         # Close previous connection
         if self._active:
-            self.stop()
-            self.join()
+            try:
+                self.stop()
+                from time import sleep
+                sleep(0.1)
+                self.join()
+            except Exception as ex:
+                self.gateway.write_error(f'订阅合约{req.symbol},关闭前一个ws连接异常:{str(ex)}')
 
         # Create new connection
         channels = []

@@ -31,13 +31,25 @@ celery_config = load_json(file_path)
 # broker = celery_config.get('celery_broker','redis://192.168.0.202:6379')
 # backend = celery_config.get('celery_backend','redis://192.168.0.202:6379/0')
 
+# 使用 mongodb
+# 配置格式mongodb://userid:password@hostname:port/database_name
+# broker = celery_config.get('celery_broker','mongodb://localhost:27017/database_name')
+
+# celery 6.0+ 通过环境变量配置,没有作为参数传递到Celery()方法中
+# result_backend = celery_config.get('result_backend','mongodb://localhost:27017/')
+# mongodb_backend_settings = celery_config.get('mongodb_backend_settings',{
+#     'database': 'mydb',
+#     'taskmeta_collection': 'my_taskmeta_collection',
+# })
+# backend = None
+
 # 使用rabbitMQ
 broker = celery_config.get('celery_broker', 'amqp://admin:admin@127.0.0.1:5672//')
 backend = celery_config.get('celery_backend', 'amqp://admin:admin@127.0.0.1:5672//')
 
 print(u'Celery 使用redis配置:\nbroker:{}\nbackend:{}'.format(broker, backend))
 
-app = Celery('vnpy_task', broker=broker)
+app = Celery('vnpy_task', broker=broker, backend=backend)
 
 # 动态导入task目录下子任务
 # app.conf.CELERY_IMPORTS = ['vnpy.task.celery_app.worker_started']

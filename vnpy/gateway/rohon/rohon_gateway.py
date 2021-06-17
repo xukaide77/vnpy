@@ -1088,7 +1088,7 @@ class RohonTdApi(TdApi):
             price=data["LimitPrice"],
             volume=data["VolumeTotalOriginal"],
             traded=data["VolumeTraded"],
-            status=STATUS_ROHON2VT[data["OrderStatus"]],
+            status=STATUS_ROHON2VT.get(data["OrderStatus"],Status.UNKNOWN),
             time=data["InsertTime"],
             gateway_name=self.gateway_name
         )

@@ -16,13 +16,14 @@ using namespace pybind11;
 #define ONHEARTBEATWARNING 2
 #define ONRSPUSERLOGIN 3
 #define ONRSPUSERLOGOUT 4
-#define ONRSPERROR 5
-#define ONRSPSUBMARKETDATA 6
-#define ONRSPUNSUBMARKETDATA 7
-#define ONRSPSUBFORQUOTERSP 8
-#define ONRSPUNSUBFORQUOTERSP 9
-#define ONRTNDEPTHMARKETDATA 10
-#define ONRTNFORQUOTERSP 11
+#define ONRSPQRYMULTICASTINSTRUMENT 5
+#define ONRSPERROR 6
+#define ONRSPSUBMARKETDATA 7
+#define ONRSPUNSUBMARKETDATA 8
+#define ONRSPSUBFORQUOTERSP 9
+#define ONRSPUNSUBFORQUOTERSP 10
+#define ONRTNDEPTHMARKETDATA 11
+#define ONRTNFORQUOTERSP 12
 
 
 ///-------------------------------------------------------------------------------------
@@ -78,6 +79,9 @@ public:
 	///登出请求响应
 	virtual void OnRspUserLogout(CThostFtdcUserLogoutField *pUserLogout, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
 
+	/// 组播合约返回
+    virtual void OnRspQryMulticastInstrument(CThostFtdcMulticastInstrumentField *pMulticastInstrument, CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast);
+
 	///错误应答
 	virtual void OnRspError(CThostFtdcRspInfoField *pRspInfo, int nRequestID, bool bIsLast) ;
 
@@ -115,6 +119,8 @@ public:
 
 	void processRspUserLogout(Task *task);
 
+    void processRspQryMulticastInstrument(Task *task);
+
 	void processRspError(Task *task);
 
 	void processRspSubMarketData(Task *task);
@@ -147,6 +153,8 @@ public:
 	virtual void onRspUserLogin(const dict &data, const dict &error, int reqid, bool last) {};
 
 	virtual void onRspUserLogout(const dict &data, const dict &error, int reqid, bool last) {};
+
+    virtual void onRspQryMulticastInstrument(const dict &data, const dict &error, int reqid, bool last) {};
 
 	virtual void onRspError(const dict &error, int reqid, bool last) {};
 
@@ -191,4 +199,6 @@ public:
 	int reqUserLogin(const dict &req, int reqid);
 
 	int reqUserLogout(const dict &req, int reqid);
+
+	int reqQryMulticastInstrument(const dict &req, int reqid);
 };

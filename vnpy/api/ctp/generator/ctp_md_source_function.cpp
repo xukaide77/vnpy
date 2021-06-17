@@ -28,3 +28,13 @@ int MdApi::reqUserLogout(const dict &req, int reqid)
 	return i;
 };
 
+int MdApi::reqQryMulticastInstrument(const dict &req, int reqid)
+{
+	CThostFtdcQryMulticastInstrumentField myreq = CThostFtdcQryMulticastInstrumentField();
+	memset(&myreq, 0, sizeof(myreq));
+	getInt(req, "TopicID", &myreq.TopicID);
+	getString(req, "InstrumentID", myreq.InstrumentID);
+	int i = this->api->ReqQryMulticastInstrument(&myreq, reqid);
+	return i;
+};
+
