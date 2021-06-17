@@ -129,7 +129,7 @@ class TqFutureData():
     def __init__(self, strategy=None):
         self.strategy = strategy  # 传进来策略实例，这样可以写日志到策略实例
 
-        self.api = TqApi(TqSim(), url="wss://u.shinnytech.com/t/md/front/mobile")
+        self.api = TqApi(auth="xukaide77,xk82513994")
 
     def get_tick_serial(self, vt_symbol: str):
         # 获取最新的8964个数据 tick的话就相当于只有50分钟左右
@@ -349,6 +349,6 @@ if __name__ == '__main__':
     # print(ticks[0])
 
     # print(ticks[-1])
-    bars = tqsdk.get_bars(vt_symbol='ni2011.SHFE')
+    bars = tqsdk.get_bars(vt_symbol='ag2105.SHFE')
     print(bars[0])
     print(bars[-1])

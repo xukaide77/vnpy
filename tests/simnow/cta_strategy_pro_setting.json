@@ -1,0 +1,52 @@
+{
+    "TripleMa_v2_J": {
+        "class_name": "Strategy_TripleMa_v2",
+        "vt_symbol": "j2009.DCE",
+        "auto_init": false,
+        "auto_start": false,
+        "setting": {
+            "max_invest_pos": 10,
+            "max_invest_margin": 0,
+            "max_invest_percent": 10,
+            "single_lost_percent": 1,
+            "add_pos_under_price_count": 2,
+            "add_pos_above_price_count": 0,
+            "x_atr_len": 20,
+            "x_minute": 15,
+            "x_ma1_len": 10,
+            "x_ma2_len": 40,
+            "x_ma3_len": 120,
+            "backtesting": false,
+            "idx_symbol": "J99.DCE"
+        }
+    },
+    "Spread_v1_RB": {
+        "class_name": "Strategy_SpreadGrid_v1",
+        "vt_symbol": "rb2010-1-rb2101-1-CJ.SPD",
+        "auto_init": false,
+        "auto_start": false,
+        "setting": {
+            "backtesting": false,
+            "class_name": "Strategy_SpreadGrid_v1",
+            "act_vt_symbol": "rb2010.SHFE",
+            "pas_vt_symbol": "rb2101.SHFE",
+            "max_invest_pos": 3,
+            "spd_price_tick": 1,
+            "base_up_line": 40,
+            "base_dn_line": -40
+        }
+    },
+    "Spread_v3_AU": {
+        "class_name": "Strategy_SpreadGrid_v1",
+        "vt_symbol": "au2012-1-au2106-1-CJ.SPD",
+        "auto_init": false,
+        "auto_start": false,
+        "setting": {
+            "backtesting": false,
+            "class_name": "Strategy_SpreadGrid_v1",
+            "act_vt_symbol": "au2012.SHFE",
+            "pas_vt_symbol": "au2106.SHFE",
+            "max_invest_pos": 3
+        }
+    }
+}

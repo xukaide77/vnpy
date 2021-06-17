@@ -27,7 +27,7 @@ if __name__ == "__main__":
         filter_underlying_symbols = []
 
     # 保存的1分钟指数 bar目录
-    bar_data_folder = os.path.abspath(os.path.join(vnpy_root, 'bar_data'))
+    bar_data_folder = os.path.abspath(os.path.join('h:', 'bar_data'))
 
     # 开始日期（每年大概需要几分钟）
     start_date = '20160101'

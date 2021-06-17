@@ -1975,7 +1975,8 @@ class TqMdApi():
         """"""
         try:
             from tqsdk import TqApi
-            self.api = TqApi(url="wss://u.shinnytech.com/t/md/front/mobile")
+            # self.api = TqApi(url="wss://u.shinnytech.com/t/md/front/mobile")
+            self.api = TqApi(auth=setting['auth'])
         except Exception as e:
             self.gateway.write_log(f'天勤行情API接入异常'.format(str(e)))
         if self.api:

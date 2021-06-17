@@ -32,8 +32,8 @@ celery_config = load_json(file_path)
 # backend = celery_config.get('celery_backend','redis://192.168.0.202:6379/0')
 
 # 使用rabbitMQ
-broker = celery_config.get('celery_broker', 'amqp://admin:admin@192.168.0.202:5672//')
-backend = celery_config.get('celery_backend', 'amqp://admin:admin@192.168.0.202:5672//')
+broker = celery_config.get('celery_broker', 'amqp://admin:admin@127.0.0.1:5672//')
+backend = celery_config.get('celery_backend', 'amqp://admin:admin@127.0.0.1:5672//')
 
 print(u'Celery 使用redis配置:\nbroker:{}\nbackend:{}'.format(broker, backend))
 

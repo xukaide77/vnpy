@@ -16,7 +16,7 @@ from tqsdk import TqApi, TqSim
 vnpy_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 if vnpy_root not in sys.path:
     sys.path.append(vnpy_root)
-
+data_root = 'd:/'  # todo xk
 os.environ["VNPY_TESTING"] = "1"
 
 from vnpy.data.tdx.tdx_future_data import get_future_contracts, Exchange
@@ -28,7 +28,7 @@ if __name__ == "__main__":
         print('请使用 --help 查看说明')
     # 参数分析
     parser = argparse.ArgumentParser()
-    parser.add_argument('-s', '--symbol', type=str, default='', help='下载合约，格式： rb2010 或者 SHFE.rb2010')
+    parser.add_argument('-s', '--symbol', type=str, default='', help='下载合约，格式： rb2010 或者 SHFE.rb2101')
     parser.add_argument('-b', '--begin', type=str, default='20160101', help='开始日期，格式：20160101')
     parser.add_argument('-e', '--end', type=str, default=datetime.now().strftime('%Y%m%d'),
                         help='结束日期,格式:{}'.format(datetime.now().strftime('%Y%m%d')))
@@ -38,7 +38,7 @@ if __name__ == "__main__":
         os._exit(0)
 
     # 开始下载(使用快期的免费行情websocket)
-    api = TqApi(account=TqSim(), url="wss://u.shinnytech.com/t/md/front/mobile")
+    api = TqApi(account=TqSim(), auth="xukaide77,xk82513994")
     download_tasks = {}
     begin_date = datetime.strptime(args.begin, '%Y%m%d')
     end_date = datetime.strptime(args.end, '%Y%m%d')
@@ -64,7 +64,7 @@ if __name__ == "__main__":
             continue
 
         save_folder = os.path.abspath(os.path.join(
-            vnpy_root, 'tick_data', 'tq', 'future',
+            data_root, 'tick_data', 'tq', 'future',
             download_date.strftime('%Y%m')))
         if not os.path.exists(save_folder):
             os.makedirs(save_folder)

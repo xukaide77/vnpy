@@ -1,0 +1,7 @@
+datetime,symbol,volume,price,operation,signal,stop_price,target_price,long_pos,short_pos
+,au2010-1-au2102-1-CJ.SPD,1,-3.46,buy,,,,1,0
+,au2010-1-au2102-1-CJ.SPD,1,-3.56,buy,,,,2,0
+,au2010-1-au2102-1-CJ.SPD,1,-3.5,buy,,,,1,0
+,au2010-1-au2102-1-CJ.SPD,1,-3.48,buy,,,,1,0
+,au2010-1-au2102-1-CJ.SPD,1,-3.48,buy,,,,1,0
+,au2010-1-au2102-1-CJ.SPD,1,-3.58,buy,,,,2,0

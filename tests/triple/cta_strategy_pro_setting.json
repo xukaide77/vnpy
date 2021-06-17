@@ -1,0 +1,23 @@
+{
+    "TripleMa_v2_AG": {
+        "class_name": "Strategy_TripleMa_v2",
+        "vt_symbol": "pp2105.DCE",
+        "auto_init": true,
+        "auto_start": true,
+        "setting": {
+            "max_invest_pos": 10,
+            "max_invest_margin": 0,
+            "max_invest_percent": 10,
+            "single_lost_percent": 2,
+            "add_pos_under_price_count": 2,
+            "add_pos_above_price_count": 0,
+            "x_atr_len": 20,
+            "x_minute": 15,
+            "x_ma1_len": 10,
+            "x_ma2_len": 40,
+            "x_ma3_len": 120,
+            "backtesting": false,
+            "idx_symbol": "PP99.DCE"
+        }
+    }
+}

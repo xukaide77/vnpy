@@ -27,14 +27,14 @@ Centos 7:
 Celery flower 监控
 
     1) pip install flower
-    2) celery -A vnpy.task.celery_app --port=5555 --broker
+    2) celery -A vnpy.task.celery_app --port=5555 --broker=amqp://admin:admin@127.0.0.1:5672//
     
 # 启动
 windows 10
     
     1) conda activate py37
     2) 进入项目目录后,例如c:\vnpy2, 运行命令：
-        celery worker -c 2 -A vnpy.task.celery_app  -P eventlet -l debug -f celery.log
+        celery -A vnpy.task.celery_app worker -c 2   -P eventlet -l debug -f celery.log
         其中:
         worker，表明这是celery的worker， 
         -c 代表使用多少个cpu作为线程池

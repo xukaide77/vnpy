@@ -1,0 +1,2 @@
+datetime,symbol,volume,price,operation,signal,stop_price,target_price,long_pos,short_pos
+,rb2010-1-rb2101-1-CJ.SPD,1,84.0,short,,,,0,-1

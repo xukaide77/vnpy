@@ -416,7 +416,7 @@ def import_module_by_str(import_module_name):
             # if not hasattr(mod, comp):
             # loaded_modules = '.'.join([loaded_modules, comp])
             print('realod {}'.format(loaded_modules))
-            mod = reload(mod)
+            # mod = reload(mod)
             # else:
             #    print('from {} import {}'.format(loaded_modules, comp))
             comp = getattr(mod, comp)

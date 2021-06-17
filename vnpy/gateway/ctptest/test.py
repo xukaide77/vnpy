@@ -67,7 +67,7 @@ def test():
     gateway.connect(ctp_setting)
 
     # gateway.connect()
-    auto_subscribe_symbols = ['rb2101']
+    auto_subscribe_symbols = ['rb2105']
     for symbol in auto_subscribe_symbols:
         print(u'自动订阅合约:{}'.format(symbol))
         sub = SubscribeRequest(symbol=symbol, exchange=Exchange.SHFE)
@@ -83,10 +83,10 @@ def test():
         couter -= 1
 
     for i in range(5):
-        print(f'发出rb2101的买入委托{i+1}')
+        print(f'发出rb2105的买入委托{i+1}')
         order_req = OrderRequest(
             strategy_name='',
-            symbol='rb2101',
+            symbol='rb2105',
             exchange=Exchange.SHFE,
             direction=Direction.LONG,
             offset=Offset.OPEN,
@@ -98,10 +98,10 @@ def test():
 
 
     for i in range(5):
-        print(f'发出rb2101的平仓委托{i+1}')
+        print(f'发出rb2105的平仓委托{i+1}')
         order_req = OrderRequest(
             strategy_name='',
-            symbol='rb2101',
+            symbol='rb2105',
             exchange=Exchange.SHFE,
             direction=Direction.LONG,
             offset=Offset.CLOSETODAY,
@@ -113,10 +113,10 @@ def test():
 
     #
     for i in range(5):
-        print(f'发出rb2101的撤单委托{i + 1}')
+        print(f'发出rb2105的撤单委托{i + 1}')
         cancel_req = CancelRequest(
             orderid=f'5_-78969411_{i+1}',
-            symbol='rb2101',
+            symbol='rb2105',
             exchange=Exchange.SHFE
         )
         gateway.cancel_order(cancel_req)

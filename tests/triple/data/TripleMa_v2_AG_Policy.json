@@ -1,0 +1,19 @@
+{
+    "create_time": "2021-03-17 14:24:37",
+    "save_time": "2021-03-18 09:27:50",
+    "tns_direction": "LONG",
+    "sub_tns": {
+        "count": 1,
+        "price": 5410.0
+    },
+    "tns_high_price": 0,
+    "tns_low_price": 0,
+    "tns_open_price": 5410.0,
+    "last_open_price": 5410.0,
+    "last_under_open_price": 5410.0,
+    "tns_stop_price": 5360.0,
+    "tns_rtn_pips": 36,
+    "allow_add_pos": true,
+    "add_pos_count_above_first_price": 0,
+    "add_pos_count_under_first_price": 2
+}

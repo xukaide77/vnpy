@@ -31,3 +31,10 @@ dist
 _build
 _static
 _templates
+tests/singletest/log/
+tests/simnow/log/
+examples/vn_trader/ctp/
+examples/vn_trader/log/CtaStrategyPro_2020-06-21.log
+tests/celery/logs/
+examples/vn_trader/log/
+tests/triple/log/

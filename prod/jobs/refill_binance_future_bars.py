@@ -24,7 +24,7 @@ if len(contracts) == 0:
     contracts = BinanceFutureData.load_contracts()
 
 # 开始下载日期
-start_date = '20190101'
+start_date = '20210312'
 
 if __name__ == "__main__":
 

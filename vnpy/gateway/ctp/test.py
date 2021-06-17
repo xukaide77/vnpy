@@ -66,7 +66,7 @@ def test():
     gateway.connect(ctp_setting)
 
     # gateway.connect()
-    auto_subscribe_symbols = ['rb2010']
+    auto_subscribe_symbols = ['rb2105']
     for symbol in auto_subscribe_symbols:
         print(u'自动订阅合约:{}'.format(symbol))
         sub = SubscribeRequest(symbol=symbol, exchange=Exchange.SHFE)

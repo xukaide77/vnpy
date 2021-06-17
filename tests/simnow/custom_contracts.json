@@ -1,0 +1,44 @@
+{
+  "rb2010-1-rb2101-1-CJ":
+  {
+    "name": "螺纹钢10/螺纹钢01主力比",
+    "exchange": "SPD",
+    "leg1_symbol": "rb2010",
+    "leg1_ratio": 1,
+    "leg2_symbol": "rb2101",
+    "leg2_ratio": 1,
+    "is_ratio": false,
+    "is_spread": true,
+    "size": 10,
+    "margin_rate": 0.1,
+    "price_tick": 1
+  },
+  "au2006-1-au2012-1-CJ":
+  {
+    "name": "黄金06/黄金12主力比",
+    "exchange": "SPD",
+    "leg1_symbol": "au2010",
+    "leg1_ratio": 1,
+    "leg2_symbol": "au2012",
+    "leg2_ratio": 1,
+    "is_ratio": false,
+    "is_spread": true,
+    "size": 1000,
+    "margin_rate": 0.08,
+    "price_tick": 0.1
+  },
+  "au2012-1-au2106-1-CJ":
+  {
+    "name": "黄金12/黄金06主力比",
+    "exchange": "SPD",
+    "leg1_symbol": "au2012",
+    "leg1_ratio": 1,
+    "leg2_symbol": "au2106",
+    "leg2_ratio": 1,
+    "is_ratio": false,
+    "is_spread": true,
+    "size": 1000,
+    "margin_rate": 0.08,
+    "price_tick": 0.04
+  }
+}
